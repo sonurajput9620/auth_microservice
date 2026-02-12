@@ -7,16 +7,2849 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum UserRole {
-  ADMIN
-  USER
+model active_site_role_sessions {
+  id             BigInt    @id @default(autoincrement()) @db.UnsignedBigInt
+  site_id        Int?
+  user_role      Int?
+  locked_by_user Int?
+  session_token  String?   @db.VarChar(500)
+  login_time     DateTime? @db.DateTime(0)
+  user_id        Int?
+  status         Boolean?
+  ip_address     String?   @db.VarChar(45)
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  password  String
-  role      UserRole @default(USER)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model alert_actions {
+  global_action_id Int       @id @default(autoincrement())
+  label            String?   @db.VarChar(255)
+  dateandtime      DateTime? @db.DateTime(0)
+  status           String?   @db.VarChar(50)
+}
+
+model alert_history {
+  historyid   BigInt    @id @default(autoincrement())
+  alertid     BigInt?
+  alertstatus BigInt?
+  createdby   BigInt?
+  createddate DateTime? @db.DateTime(0)
+  comments    String?   @db.VarChar(1000)
+  assignedto  BigInt?
+}
+
+model alert_history_Category {
+  historyid   Int       @id @default(autoincrement())
+  alertid     Int
+  alertstatus Int
+  createdby   Int?
+  createddate DateTime? @db.DateTime(0)
+  comments    String?   @db.Text
+  assignedto  Int?
+
+  @@index([alertid], map: "idx_alert_history_category_alertid")
+  @@index([createdby], map: "idx_alert_history_category_createdby")
+  @@index([alertstatus], map: "idx_alert_history_category_status")
+}
+
+model alert_site_actions {
+  id               Int       @id @default(autoincrement())
+  siteid           Int?
+  global_action_id Int?
+  selected         Int?      @db.TinyInt
+  dateandtime      DateTime? @db.DateTime(0)
+  status           String?   @db.VarChar(50)
+}
+
+model alert_status {
+  alertstatusid BigInt  @id @default(autoincrement())
+  status        String  @db.VarChar(100)
+  statusdesc    String? @db.VarChar(100)
+
+  @@index([alertstatusid], map: "idx_alertstatusid")
+}
+
+model alert_trigger {
+  triggerid          BigInt    @id @default(autoincrement())
+  alertid            BigInt?
+  triggerdatetime    DateTime? @db.DateTime(0)
+  alerttriggerstatus BigInt?
+  assignedto         BigInt?
+
+  @@index([alertid, triggerdatetime(sort: Desc)], map: "idx_alert_trigger_alertid_datetime")
+}
+
+model alert_types {
+  typeid BigInt @id @default(autoincrement())
+  type   String @db.VarChar(100)
+  status Int    @db.TinyInt
+
+  @@index([typeid], map: "idx_typeid")
+}
+
+model alerts {
+  alertid          BigInt    @id @default(autoincrement())
+  alertname        String?   @db.VarChar(200)
+  alerttype        BigInt?
+  alertdescription String?   @db.VarChar(1000)
+  alertinstruction String?   @db.VarChar(1000)
+  alertconditions  String?   @db.VarChar(100)
+  alertscore       String?   @db.VarChar(100)
+  alertassigned    BigInt?
+  alertpriority    Int?      @db.TinyInt
+  priorityinterval String?   @db.VarChar(100)
+  alertmodule      String?   @db.VarChar(200)
+  alertparameter   String?   @db.VarChar(200)
+  alertequipment   String?   @db.VarChar(300)
+  createddate      DateTime? @db.DateTime(0)
+  updatedate       DateTime? @db.DateTime(0)
+  instructionfile  String?   @db.VarChar(1000)
+  alertinterval    String?   @db.VarChar(100)
+  startdate        DateTime? @db.DateTime(0)
+  alertstatus      BigInt?
+  siteid           BigInt?
+  alertdelayed     Int?      @db.TinyInt
+  delayedinterval  String?   @db.VarChar(100)
+  status           Int?
+  isclear          Int?
+  triggerdatetime  DateTime? @db.DateTime(0)
+
+  @@index([siteid, status], map: "idx_alerts_siteid_status")
+}
+
+model alerts_Category {
+  alertid          Int       @id @default(autoincrement())
+  categoryid       Int
+  alertname        String    @db.VarChar(255)
+  alerttype        Int
+  alertdescription String?   @db.Text
+  alertinstruction String?   @db.Text
+  alertconditions  String?   @db.Text
+  alertscore       String?   @db.VarChar(255)
+  alertassigned    Int?
+  alertpriority    Boolean?  @default(false)
+  priorityinterval String?   @db.VarChar(50)
+  alertmodule      String?   @db.VarChar(100)
+  alertparameter   String?   @db.VarChar(100)
+  alertequipment   Int?
+  createddate      DateTime? @db.DateTime(0)
+  updatedate       DateTime? @db.DateTime(0)
+  instructionfile  String?   @db.VarChar(255)
+  alertinterval    String?   @db.VarChar(50)
+  startdate        DateTime? @db.DateTime(0)
+  alertstatus      Int?
+  alertdelayed     Boolean?  @default(false)
+  delayedinterval  String?   @db.VarChar(50)
+  status           Boolean   @default(true)
+  isclear          Boolean   @default(false)
+  triggerdatetime  DateTime? @db.DateTime(0)
+
+  @@index([alertassigned], map: "idx_alerts_category_assigned")
+  @@index([categoryid, status], map: "idx_alerts_category_category_status")
+  @@index([alerttype], map: "idx_alerts_category_type")
+}
+
+model alerts_sub_category {
+  id               Int       @id @default(autoincrement())
+  sub_category_id  Int
+  alertid          Int
+  created_by       Int
+  status           Boolean?  @default(true)
+  created_datetime DateTime? @default(now()) @db.DateTime(0)
+}
+
+model audit_log_report {
+  id              Int      @id @default(autoincrement())
+  user_id         Int
+  action          String   @db.VarChar(50)
+  previous_value  Json?
+  new_value       Json?
+  created_at      DateTime @default(now())
+  changes_summary String?  @db.Text
+  entity_id       Int?
+  entity_name     String?  @db.VarChar(255)
+  entity_type     String   @db.VarChar(50)
+  error_message   String?  @db.Text
+  ip_address      String?  @db.VarChar(100)
+  module_name     String?  @db.VarChar(100)
+  request_method  String?  @db.VarChar(10)
+  request_path    String?  @db.VarChar(500)
+  status          String?  @db.VarChar(20)
+  user_agent      String?  @db.Text
+  user_email      String?  @db.VarChar(255)
+
+  @@index([action], map: "idx_audit_action")
+  @@index([created_at], map: "idx_audit_created_at")
+  @@index([entity_type, entity_id], map: "idx_audit_entity")
+  @@index([entity_id], map: "idx_audit_entity_id")
+  @@index([entity_type], map: "idx_audit_entity_type")
+  @@index([user_id], map: "idx_audit_user_id")
+}
+
+model auth_group {
+  id   Int    @id @default(autoincrement())
+  name String @unique(map: "name") @db.VarChar(80)
+}
+
+model auth_group_permissions {
+  id            BigInt @id @default(autoincrement())
+  group_id      Int
+  permission_id Int
+}
+
+model auth_permission {
+  id              Int    @id @default(autoincrement())
+  name            String @db.VarChar(50)
+  content_type_id Int
+  codename        String @db.VarChar(100)
+
+  @@unique([content_type_id, codename], map: "auth_permission_content_type_id_codename_01ab375a_uniq")
+}
+
+model auth_user {
+  id           Int      @id @default(autoincrement())
+  password     String   @db.VarChar(128)
+  last_login   DateTime @db.DateTime(6)
+  is_superuser Boolean
+  username     String   @unique(map: "username") @db.VarChar(30)
+  first_name   String   @db.VarChar(30)
+  last_name    String   @db.VarChar(30)
+  email        String   @db.VarChar(75)
+  is_staff     Boolean
+  is_active    Boolean
+  date_joined  DateTime @db.DateTime(6)
+}
+
+model auth_user_groups {
+  id       BigInt @id @default(autoincrement())
+  user_id  Int
+  group_id Int
+}
+
+model auth_user_user_permissions {
+  id            BigInt @id @default(autoincrement())
+  user_id       Int
+  permission_id Int
+}
+
+model category {
+  id            Int       @id @default(autoincrement())
+  category_name String    @db.VarChar(255)
+  status        Boolean?  @default(true)
+  created       DateTime? @default(now()) @db.Timestamp(0)
+  created_by    Int?
+}
+
+model category_alerts_actions {
+  id               Int           @id @default(autoincrement())
+  sub_category_id  Int?          @db.UnsignedInt
+  global_action_id Int
+  selected         Boolean?      @default(false)
+  dateandtime      DateTime?     @default(now()) @db.DateTime(0)
+  status           String?       @db.VarChar(50)
+  tbl_category     tbl_category? @relation(fields: [sub_category_id], references: [category_id], onDelete: Restrict, map: "fk_category_alerts_actions_sub_category")
+
+  @@index([sub_category_id], map: "idx_caa_sub_category_id")
+}
+
+model clientDetails {
+  clientId       Int      @id @unique(map: "clientId") @default(autoincrement())
+  clientName     String?  @db.VarChar(50)
+  clientEmail    String?  @db.VarChar(50)
+  clientPassword String?  @db.VarChar(50)
+  organisationId Int?
+  createdAt      DateTime @db.DateTime(0)
+  updatedAt      DateTime @db.DateTime(0)
+}
+
+model corpReportLog {
+  id        Int       @id @unique(map: "id") @default(autoincrement())
+  purpose   String?   @db.VarChar(50)
+  request   Json?
+  date      DateTime? @db.DateTime(0)
+  status    Int?
+  createdAt DateTime  @db.DateTime(0)
+  updatedAt DateTime  @db.DateTime(0)
+}
+
+model dashboard {
+  id                 Int             @id @default(autoincrement())
+  dashboard_name     String
+  dashboard_group_id Int
+  layout_config      Json?
+  description        String?         @db.Text
+  dashboard_type     String?
+  category           String?
+  automated_email    Boolean         @default(false)
+  email              String?
+  email_interval     String?
+  email_start_date   DateTime?
+  email_start_time   String?
+  show_on_dashboard  Boolean         @default(true)
+  created_at         DateTime        @default(now())
+  updated_at         DateTime
+  site_id            Int?
+  created_by         Int?
+  deleted_at         DateTime?
+  status             Boolean         @default(true)
+  updated_by         Int?
+  last_email_sent_at DateTime?
+  metadata           Json?
+  dashboard_group    dashboard_group @relation(fields: [dashboard_group_id], references: [id])
+  report             report[]
+
+  @@index([dashboard_group_id], map: "dashboard_dashboard_group_id_fkey")
+}
+
+model dashboard_group {
+  id                Int         @id @default(autoincrement())
+  dashboard_type    String
+  status            Boolean     @default(true)
+  created_at        DateTime    @default(now())
+  updated_at        DateTime
+  site_id           Int?
+  created_by        Int?
+  deleted_at        DateTime?
+  updated_by        Int?
+  metadata          Json?
+  show_on_dashboard Boolean     @default(false)
+  dashboard         dashboard[]
+  link              link[]
+}
+
+model django_content_type {
+  id        Int    @id @default(autoincrement())
+  name      String @db.VarChar(100)
+  app_label String @db.VarChar(100)
+  model     String @db.VarChar(100)
+
+  @@unique([app_label, model], map: "django_content_type_app_label_model_76bd3d3b_uniq")
+}
+
+model django_migrations {
+  id      BigInt   @id @default(autoincrement())
+  app     String   @db.VarChar(255)
+  name    String   @db.VarChar(255)
+  applied DateTime @db.DateTime(6)
+}
+
+model execution_locks {
+  stage_name String   @id @db.VarChar(50)
+  expires_at DateTime @db.DateTime(0)
+  created_at DateTime @db.DateTime(0)
+
+  @@index([expires_at], map: "idx_expires_at")
+}
+
+model jobs_history {
+  id                   Int       @id @default(autoincrement())
+  run_id               String    @unique
+  tenant_id            String?
+  report_id            Int
+  site_id              String?
+  dashboard_id         Int?
+  widget_id            String?
+  status               String
+  error                Json?
+  processed_rows_count Int?
+  retry_count          Int       @default(0)
+  started_at           DateTime  @default(now())
+  finished_at          DateTime?
+  created_at           DateTime  @default(now())
+  updated_at           DateTime
+  payload              Json?
+  stage                String?
+  triggered_by         Int?
+}
+
+model link {
+  id                 Int             @id @default(autoincrement())
+  link_name          String?
+  report_ids         String?         @db.Text
+  order              Int?
+  dashboard_group_id Int
+  layout_config      Json?
+  created_at         DateTime?
+  updated_at         DateTime?
+  dashboards         String          @db.Text
+  dashboard_group    dashboard_group @relation(fields: [dashboard_group_id], references: [id])
+
+  @@index([dashboard_group_id], map: "link_dashboard_group_id_fkey")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model lkp_module {
+  module_id            Int       @id @default(autoincrement()) @db.UnsignedInt
+  module_name          String?   @db.VarChar(50)
+  module_description   String?   @db.Text
+  module_code          String?   @db.VarChar(10)
+  created_by           Int?      @db.UnsignedInt
+  created_datetime     DateTime? @db.DateTime(0)
+  operation_ip_address String?   @db.VarChar(50)
+  module_status        Boolean?  @default(true)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model lkp_module_parameter {
+  parameter_id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  module_id            Int?      @db.UnsignedInt
+  module_code          String?   @db.VarChar(40)
+  parameter_name       String?   @db.VarChar(50)
+  parameter_type       Boolean?
+  parameter_unit       String?   @db.VarChar(50)
+  parameter_banchmark  String?   @db.VarChar(50)
+  instruction          String?   @db.Text
+  created_by           Int?      @db.UnsignedInt
+  created_date         DateTime? @db.DateTime(0)
+  operation_ip_address String?   @db.VarChar(50)
+  parameter_status     Boolean?  @default(true)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model lkp_module_parameter_range {
+  parameter_range_id Int      @id @default(autoincrement())
+  range_name         String?  @db.VarChar(255)
+  module_id          Int?
+  parameter_id       Int?
+  score              String?  @db.VarChar(10)
+  min                String?  @db.VarChar(10)
+  max                String?  @db.VarChar(10)
+  range_status       Boolean? @default(true)
+  parameter_query    String?  @db.Text
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model lkp_module_type {
+  module_type_id       Int       @id @default(autoincrement()) @db.UnsignedInt
+  module_id            Int?      @db.UnsignedInt
+  type_name            String?   @db.VarChar(50)
+  created_by           Int?      @db.UnsignedInt
+  created_datetime     DateTime? @db.DateTime(0)
+  operation_ip_address String?   @db.VarChar(50)
+  type_status          Boolean?  @default(true)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model lkp_opex_module {
+  module_id            Int       @id @default(autoincrement()) @db.UnsignedInt
+  module_name          String?   @db.VarChar(50)
+  module_description   String?   @db.Text
+  module_code          String?   @db.VarChar(10)
+  created_by           Int?      @db.UnsignedInt
+  created_datetime     DateTime? @db.DateTime(0)
+  operation_ip_address String?   @db.VarChar(50)
+  module_status        Boolean?  @default(true)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model lkp_opex_module_parameter {
+  parameter_id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  module_id            Int?      @db.UnsignedInt
+  module_code          String?   @db.VarChar(40)
+  parameter_name       String?   @db.VarChar(50)
+  parameter_type       Boolean?
+  details              String?   @db.Text
+  parameter_code       String?   @db.VarChar(40)
+  parameter_formula    String?   @db.Text
+  parameter_unit       String?   @db.VarChar(50)
+  price                String?   @db.VarChar(11)
+  price_type           Boolean   @default(false)
+  parameter_banchmark  String?   @db.VarChar(50)
+  created_by           Int?      @db.UnsignedInt
+  created_date         DateTime? @db.DateTime(0)
+  operation_ip_address String?   @db.VarChar(50)
+  parameter_status     Boolean?  @default(true)
+}
+
+model mongo_upload_alert {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  siteId     Int?
+  uploadid   String?   @db.VarChar(45)
+  uploaddate DateTime? @db.DateTime(0)
+  adddate    DateTime? @db.DateTime(0)
+}
+
+model project {
+  projectid          BigInt    @id @default(autoincrement())
+  projectname        String    @db.VarChar(500)
+  projectdesc        String?   @db.VarChar(100)
+  startdate          DateTime  @db.DateTime(0)
+  enddate            DateTime? @db.DateTime(0)
+  nodata             Boolean?
+  zerodata           Boolean?
+  operations         String?   @db.VarChar(500)
+  flushtime          String?   @db.VarChar(500)
+  cycletime          String?   @db.VarChar(500)
+  status             String?   @db.VarChar(100)
+  filteredoperations Boolean?
+}
+
+model report {
+  id                        Int                @id @default(autoincrement())
+  report_name               String
+  layout_config             Json?
+  report_type               String?
+  status                    Boolean            @default(true)
+  created_at                DateTime           @default(now())
+  dashboardId               Int?
+  updated_at                DateTime
+  module_type               String?
+  description               String?            @db.Text
+  interval                  String?
+  period                    String?
+  site_id                   String?            @db.Text
+  metadata                  Json?
+  created_by                Int?
+  deleted_at                DateTime?
+  latest_job_run            String?
+  updated_by                Int?
+  automated_report_updation Boolean?           @default(false)
+  updation_frequency        Int?               @default(0)
+  period_days               Int?               @default(0)
+  dashboard                 dashboard?         @relation(fields: [dashboardId], references: [id])
+  report_parameter          report_parameter[]
+
+  @@index([dashboardId], map: "report_dashboardId_fkey")
+}
+
+model report_parameter {
+  id                       Int       @id @default(autoincrement())
+  sites                    String?   @db.Text
+  module_type              String?
+  data_type                String?
+  graph_type               String?
+  benchmark                String?
+  created_at               DateTime  @default(now())
+  reportId                 Int?
+  updated_at               DateTime
+  param_code               String?
+  metadata                 Json?
+  module_code              String?
+  module_name              String?
+  param_name               String?
+  created_by               Int?
+  deleted_at               DateTime?
+  interval                 String?
+  sequence                 Int?
+  status                   Boolean   @default(true)
+  updated_by               Int?
+  formula                  String?
+  secondary_parameter_code String?
+  report                   report?   @relation(fields: [reportId], references: [id])
+
+  @@index([reportId], map: "report_parameter_reportId_fkey")
+}
+
+model report_permission {
+  id          Int      @id @default(autoincrement())
+  action_type String   @db.VarChar(50)
+  created_at  DateTime @default(now())
+  updated_at  DateTime
+  created_by  Int?
+  is_allowed  Boolean  @default(true)
+  role_id     Int
+  updated_by  Int?
+  tbl_role    tbl_role @relation(fields: [role_id], references: [role_id], onDelete: Cascade)
+
+  @@unique([role_id, action_type])
+  @@index([action_type], map: "idx_permission_action")
+  @@index([role_id], map: "idx_permission_role")
+}
+
+model tbl_Subcategory_equipment_product {
+  eqprod_id   Int     @id @default(autoincrement())
+  eqcat_id    Int
+  category_id Int
+  type        String? @db.VarChar(255)
+  tag_id      String? @db.VarChar(255)
+  description String? @db.VarChar(255)
+  tag_text    String? @db.Text
+  prod_status Boolean @default(true)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model tbl_alert_archive {
+  archive_id       Int       @id @default(autoincrement())
+  alert_id         Int?
+  site_id          Int?
+  module_code      String?   @db.VarChar(100)
+  parameter_code   String?   @db.VarChar(100)
+  raw_parameter_id Int?
+  alert_type       Boolean
+  alert_date       DateTime? @db.Date
+  email_send       Boolean?  @default(false)
+  created_by       Int?
+  created_date     DateTime? @db.DateTime(0)
+  archive_date     DateTime? @db.DateTime(0)
+  ip_address       String?   @db.VarChar(100)
+  alert_status     Boolean   @default(true)
+
+  @@index([alert_id], map: "alert_alert_id")
+  @@index([alert_type], map: "alert_alert_type")
+  @@index([alert_id, site_id, alert_type], map: "alert_mix_id")
+  @@index([raw_parameter_id], map: "alert_raw_parameter_id")
+  @@index([site_id], map: "alert_site_id")
+  @@index([alert_id], map: "idx_alert_archive_alert_id")
+  @@index([site_id, alert_status, alert_type], map: "idx_alert_archive_site_status_type")
+  @@index([alert_status, site_id, alert_type], map: "idx_alert_archive_status_site_type")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model tbl_alerts {
+  alert_id          Int       @id @default(autoincrement())
+  site_id           Int?
+  start_date        DateTime? @db.DateTime(0)
+  equipment         String?   @db.VarChar(255)
+  module_code       String?   @db.VarChar(100)
+  parameter_code    String?   @db.VarChar(100)
+  module_condition  String?   @db.VarChar(4)
+  score_value       String?   @db.VarChar(255)
+  alert_name        String?   @db.VarChar(255)
+  alert_description String?   @db.Text
+  time_intervals    String?   @db.VarChar(50)
+  alert_type        Int?
+  custom_query      String?   @db.Text
+  created_by        Int?
+  created_date      DateTime? @db.DateTime(0)
+  ip_address        String?   @db.VarChar(100)
+  alert_status      Boolean?  @default(true)
+
+  @@index([time_intervals, start_date], map: "idx_alerts_time_intervals_start")
+  @@index([site_id], map: "site_id_index")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model tbl_category {
+  category_id             Int                       @id @default(autoincrement()) @db.UnsignedInt
+  category_name           String?                   @db.VarChar(255)
+  category_description    String?                   @db.Text
+  channel_count           Int
+  position_count          Int
+  sitepfd                 String?                   @db.VarChar(255)
+  created_by              Int?
+  created_datetime        DateTime?                 @db.DateTime(0)
+  operation_ip_address    String?                   @db.VarChar(100)
+  module_status           Boolean?                  @default(true)
+  category_master_id      Int?
+  category_alerts_actions category_alerts_actions[]
+
+  @@index([module_status], map: "idx_category_module_status")
+}
+
+model tbl_category_equipment_category {
+  eqcat_id      Int      @id @default(autoincrement())
+  category_id   Int
+  category_name String?  @db.VarChar(255)
+  cat_status    Boolean? @default(true)
+
+  @@index([cat_status], map: "idx_tcec_cat_status")
+  @@index([category_id], map: "idx_tcec_category_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model tbl_category_module {
+  category_module_id     Int      @id @default(autoincrement())
+  category_id            Int?     @db.UnsignedInt
+  module_code            String?  @db.VarChar(40)
+  module_name            String?  @db.VarChar(100)
+  module_type            String?  @db.VarChar(40)
+  module_type_id         Int
+  module_id              Int
+  module_alias           String?  @db.VarChar(255)
+  top_module             Boolean?
+  module_priority        Int?
+  channel                Int
+  position               String   @db.VarChar(255)
+  start                  String?  @db.Text
+  end                    String?  @db.Text
+  porder                 Int?
+  category_module_status Boolean? @default(true)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model tbl_category_module_parameter {
+  category_module_parameter_id     Int      @id @default(autoincrement())
+  category_id                      Int?
+  channel                          Int
+  position                         String   @db.VarChar(50)
+  category_module_id               Int?
+  category_module_code             String?  @db.VarChar(40)
+  parameter_name                   String?  @db.VarChar(50)
+  parameter_type                   Boolean?
+  parameter_weight                 String?  @db.VarChar(50)
+  parameter_code                   String?  @db.VarChar(40)
+  parameter_formula                String?  @db.Text
+  parameter_unit                   String?  @db.VarChar(50)
+  parameter_banchmark              String?  @db.VarChar(50)
+  parameter_id                     Int
+  parameter_critical               Boolean? @default(false)
+  instruction                      String?  @db.Text
+  category_module_parameter_status Boolean? @default(true)
+}
+
+model tbl_category_module_parameter_range {
+  category_module_parameter_range_id Int      @id @default(autoincrement()) @db.UnsignedInt
+  category_id                        Int?
+  channel                            Int
+  position                           String   @db.VarChar(50)
+  category_module_id                 Int
+  category_module_parameter_id       Int?
+  parameter_range_name               String?  @db.VarChar(50)
+  range_score                        String?  @db.VarChar(50)
+  range_min                          String?  @db.VarChar(50)
+  range_max                          String?  @db.VarChar(50)
+  parameter_range_status             Boolean? @default(true)
+}
+
+model tbl_category_module_score {
+  module_score_id      Int      @id @default(autoincrement()) @db.UnsignedInt
+  category_id          Int?     @db.UnsignedInt
+  channel              Int
+  position             Int
+  category_module_id   Int?     @db.UnsignedInt
+  low_range_min        String?  @db.VarChar(10)
+  low_range_max        String?  @db.VarChar(10)
+  mid_range_min        String?  @db.VarChar(10)
+  mid_range_max        String?  @db.VarChar(10)
+  high_range_min       String?  @db.VarChar(10)
+  high_range_max       String?  @db.VarChar(10)
+  low_range_color      String   @db.VarChar(10)
+  mid_range_color      String   @db.VarChar(10)
+  high_range_color     String   @db.VarChar(10)
+  created_by           Int?     @db.UnsignedInt
+  created_date         DateTime @db.DateTime(0)
+  operation_ip_address String   @db.VarChar(50)
+  score_status         Boolean? @default(true)
+}
+
+model tbl_category_opex_module {
+  category_opex_module_id Int      @id @default(autoincrement())
+  category_id             Int?
+  opex_module_name        String?  @db.VarChar(255)
+  opex_module_description String?  @db.Text
+  opex_module_code        String?  @db.VarChar(100)
+  opex_module_status      Boolean? @default(true)
+}
+
+model tbl_category_opex_module_parameter {
+  category_opex_module_parameter_id Int      @id @default(autoincrement())
+  category_id                       Int?
+  category_opex_module_id           Int?
+  category_opex_module_code         String?  @db.VarChar(100)
+  opex_parameter_name               String?  @db.VarChar(255)
+  opex_parameter_type               Boolean?
+  details                           String?  @db.Text
+  parameter_code                    String?  @db.VarChar(100)
+  parameter_formula                 String?  @db.Text
+  parameter_unit                    String?  @db.VarChar(50)
+  price                             String?  @db.VarChar(100)
+  parameter_banchmark               String?  @db.VarChar(50)
+  category_module_parameter_status  Boolean? @default(true)
+}
+
+model tbl_corp_cat {
+  corp_cat_id      Int  @id @default(autoincrement())
+  corp_id          Int?
+  corp_category_id Int?
+  site_id          Int?
+  status           Int? @default(1) @db.TinyInt
+}
+
+model tbl_corp_dashboard_module {
+  dashboard_module_id Int     @id @default(autoincrement())
+  dashboard_id        Int?
+  panel_id            Int?
+  site_id             Int?
+  module_id           Int?
+  module_code         String? @db.VarChar(255)
+  module_name         String? @db.VarChar(255)
+  position            String? @db.VarChar(255)
+  channel             Int?
+  status              Int?    @default(1) @db.TinyInt
+
+  @@index([dashboard_id], map: "dashboard_id_index")
+}
+
+model tbl_corp_dashboard_parameter {
+  id               Int     @id @default(autoincrement())
+  dashboard_id     Int?
+  panel_id         Int?
+  site_id          Int?
+  parameter_id     Int?
+  parameter_mix_id String? @db.VarChar(25)
+  module_id        Int?
+  module_code      String? @db.VarChar(255)
+  module_name      String? @db.VarChar(255)
+  parameter_code   String? @db.VarChar(45)
+  position         String? @db.VarChar(255)
+  channel          Int?
+  score_type       String? @db.VarChar(100)
+  status           Int?    @default(1) @db.TinyInt
+
+  @@index([dashboard_id], map: "dashboard_id_index")
+}
+
+model tbl_corp_dashboard_site {
+  id           Int  @id @default(autoincrement())
+  site_id      Int?
+  dashboard_id Int?
+  status       Int? @default(1) @db.TinyInt
+}
+
+model tbl_corp_opex_dashboard_module {
+  dashboard_module_id Int     @id @default(autoincrement())
+  dashboard_id        Int?
+  panel_id            Int?
+  site_id             Int?
+  module_id           Int?
+  module_code         String? @db.VarChar(255)
+  module_name         String? @db.VarChar(255)
+  status              Int?    @default(1)
+}
+
+model tbl_corp_opex_dashboard_parameter {
+  id             Int     @id @default(autoincrement())
+  dashboard_id   Int?
+  panel_id       Int?
+  site_id        Int?
+  parameter_id   Int?
+  parameter_code String? @db.VarChar(40)
+  module_id      Int?
+  module_code    String? @db.VarChar(255)
+  formula        Int?
+  total_price    Int?
+  price_per_unit Int?
+  consumption    Int?
+  daily_cost     Int?
+  status         Int?    @default(1) @db.TinyInt
+}
+
+model tbl_corp_report_dashboard {
+  dashboard_id     Int       @id @default(autoincrement())
+  corporation_id   Int?
+  dashboard_name   String?   @db.VarChar(255)
+  dashboard_desc   String?   @db.VarChar(255)
+  selected_layout  Int?
+  stat_formula     String?   @db.Text
+  rolling_status   Int?
+  rolling_count    Int?
+  created_by       Int?
+  created_datetime DateTime? @db.DateTime(6)
+  ip_address       String?   @db.VarChar(255)
+  dashdata         String?   @db.LongText
+  preview_status   Int?
+  status           Int?      @default(1) @db.TinyInt
+}
+
+model tbl_corp_report_dashboard_pannel {
+  pannel_id          Int     @id @default(autoincrement())
+  dashboard_id       Int?
+  section_id         Int?
+  show_total         Int?
+  show_benchmark     Int?
+  stat_type          Int?
+  setPoint           Int?
+  detailed_frequency Int?
+  custom_interval    String? @db.VarChar(45)
+  type               String? @db.VarChar(255)
+  graph              Int?
+  formula            Int?
+  panel_seq          Int?    @db.TinyInt
+  status             Int?    @default(1) @db.TinyInt
+}
+
+model tbl_corp_report_log {
+  id      Int      @id @default(autoincrement())
+  purpose String?  @db.VarChar(255)
+  request String?  @db.Text
+  date    DateTime @db.DateTime(0)
+  status  Int?     @db.TinyInt
+}
+
+model tbl_corp_section {
+  section_id         Int     @id @default(autoincrement())
+  sectiontitle       String? @db.VarChar(255)
+  section_seq        Int?
+  dashboard_id       Int?
+  detailed_frequency Int?    @default(0)
+  frequency_interval Int?
+  sectionDesc        String? @db.Text
+  status             Int?    @default(1)
+}
+
+model tbl_corp_send_report {
+  id           Int       @id @default(autoincrement())
+  email        String?   @db.VarChar(255)
+  created_by   Int?
+  created_date DateTime? @db.DateTime(6)
+  dashboard_id Int?
+}
+
+model tbl_corp_site_pannel {
+  id           Int  @id @default(autoincrement())
+  site_id      Int?
+  pannel_id    Int?
+  dashboard_id Int?
+  status       Int? @default(1) @db.TinyInt
+}
+
+model tbl_corporate_category {
+  corp_cat_id        Int     @id @default(autoincrement())
+  corp_category_name String? @db.VarChar(255)
+  status             Int?    @default(1) @db.TinyInt
+
+  @@index([status], map: "idx_corp_category_status")
+}
+
+model tbl_corporation {
+  corporation_id       Int       @id @default(autoincrement())
+  corporation_name     String?   @db.VarChar(255)
+  corporation_email    String?   @db.VarChar(255)
+  nature_of_business   String?   @db.VarChar(255)
+  corporation_address  String?   @db.Text
+  corporation_country  String?   @db.VarChar(255)
+  corporation_pin      String?   @db.VarChar(255)
+  corporation_phone    String?   @db.VarChar(255)
+  created_by           Int?
+  created_datetime     DateTime? @db.DateTime(0)
+  updated_on           DateTime? @db.DateTime(0)
+  operation_ip_address String?   @db.VarChar(100)
+  homedata             String?   @db.LongText
+  corporation_status   Boolean?  @default(true)
+}
+
+model tbl_corporation_admin {
+  corp_admin_id  Int      @id @default(autoincrement())
+  user_id        Int?
+  corporation_id Int?
+  status         Boolean? @default(true)
+}
+
+model tbl_corporation_site {
+  corp_site_id   Int      @id @default(autoincrement())
+  site_id        Int?
+  corporation_id Int?
+  status         Boolean? @default(true)
+
+  @@index([corporation_id], map: "idx_corp_site_corp_id")
+  @@index([corporation_id, status], map: "idx_corp_site_corp_status")
+  @@index([site_id], map: "idx_corp_site_site_id")
+  @@index([corporation_id, status], map: "idx_corporation_site_corp_status")
+  @@index([site_id], map: "idx_corporation_site_site_id")
+}
+
+model tbl_dashboard {
+  dashboard_id     Int       @id @default(autoincrement())
+  corporation_id   Int?
+  site_id          Int?
+  dashboard_name   String?   @db.VarChar(255)
+  dashboard_desc   String?   @db.Text
+  selected_layout  Boolean?
+  stat_formula     String?   @db.Text
+  rolling_status   Boolean
+  rolling_count    Int
+  position         Int?      @default(0)
+  created_by       Int?
+  created_datetime DateTime? @db.DateTime(0)
+  ip_address       String?   @db.VarChar(100)
+  status           Boolean?  @default(true)
+
+  @@index([site_id, status], map: "idx_dashboard_site_status")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model tbl_dashboard_module {
+  dashboard_module_id     Int      @id @default(autoincrement())
+  dashboard_id            Int?
+  panel_id                Int?
+  site_id                 Int?
+  module_id               Int?
+  module_code             String?  @db.VarChar(4)
+  module_name             String?  @db.VarChar(100)
+  position                String?  @db.VarChar(50)
+  channel                 Int
+  dashboard_module_status Boolean? @default(true)
+}
+
+model tbl_dashboard_pannel {
+  pannel_id      Int      @id @default(autoincrement())
+  dashboard_id   Int?
+  site_id        Int?
+  panel_seq      Int?
+  description    String?  @db.Text
+  panel_type     String?  @db.VarChar(100)
+  line_graph     Boolean?
+  bar_graph      Boolean?
+  pie_graph      Boolean?
+  stat_functions String?  @db.Text
+  rolling_status Boolean  @default(false)
+  rolling_count  Int?     @db.TinyInt
+  status         Boolean? @default(true)
+}
+
+model tbl_dashboard_parameter {
+  id             Int      @id @default(autoincrement())
+  dashboard_id   Int?
+  panel_id       Int?
+  site_id        Int?
+  module_code    String?  @db.VarChar(40)
+  parameter_code String?  @db.VarChar(40)
+  status         Boolean? @default(true)
+}
+
+model tbl_data_1 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime  @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean   @default(true)
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+
+  @@index([code], map: "data_code_id")
+  @@index([site_id, date, code], map: "data_mix")
+  @@index([site_id], map: "data_site_id")
+  @@index([site_id, date, code, status], map: "idx_complex_upload_query")
+  @@index([site_id, status, date, code], map: "idx_data_main")
+  @@index([site_id, code, date], map: "idx_siteid_date_code_status")
+  @@index([code], map: "idx_tbl_data_1_code")
+  @@index([code, date(sort: Desc)], map: "idx_tbl_data_1_code_date")
+  @@index([date], map: "idx_tbl_data_1_date")
+  @@index([date, code], map: "idx_tbl_data_1_date_code")
+  @@index([code], map: "idx_tbl_data_51_code")
+  @@index([date], map: "idx_tbl_data_51_date")
+  @@index([date, code], map: "idx_tbl_data_51_date_code")
+  @@index([adddate], map: "idx_tbl_upload_data_adddate")
+  @@index([date], map: "idx_tbl_upload_data_date")
+  @@index([code, site_id, status], map: "idx_upload_data_code")
+  @@index([site_id, date, status], map: "idx_upload_data_site_date")
+  @@index([site_id, status, date], map: "idx_upload_data_site_status")
+}
+
+model tbl_data_100 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime  @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean   @default(true)
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+
+  @@index([code], map: "data_code_id")
+  @@index([site_id, date, code], map: "data_mix")
+  @@index([site_id], map: "data_site_id")
+  @@index([site_id, status, date, code], map: "idx_data_main")
+  @@index([site_id, date, code], map: "idx_siteid_date_code_status")
+  @@index([date], map: "idx_tbl_upload_data_date")
+}
+
+model tbl_data_103 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime  @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean   @default(true)
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+
+  @@index([code], map: "data_code_id")
+  @@index([site_id, date, code], map: "data_mix")
+  @@index([site_id], map: "data_site_id")
+  @@index([site_id, date, code], map: "idx_siteid_date_code_status")
+  @@index([date], map: "idx_tbl_upload_data_date")
+}
+
+model tbl_data_104 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime  @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean   @default(true)
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+
+  @@index([code], map: "data_code_id")
+  @@index([site_id, date, code], map: "data_mix")
+  @@index([site_id], map: "data_site_id")
+  @@index([site_id, date, code], map: "idx_siteid_date_code_status")
+  @@index([date], map: "idx_tbl_upload_data_date")
+}
+
+model tbl_data_105 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime  @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean   @default(true)
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+
+  @@index([code], map: "data_code_id")
+  @@index([site_id, date, code], map: "data_mix")
+  @@index([site_id], map: "data_site_id")
+  @@index([site_id, date, code], map: "idx_siteid_date_code_status")
+  @@index([date], map: "idx_tbl_upload_data_date")
+}
+
+model tbl_data_107 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime  @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean   @default(true)
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+
+  @@index([code], map: "data_code_id")
+  @@index([site_id, date, code], map: "data_mix")
+  @@index([site_id], map: "data_site_id")
+  @@index([site_id, date, code], map: "idx_siteid_date_code_status")
+  @@index([date], map: "idx_tbl_upload_data_date")
+}
+
+model tbl_data_108 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime  @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean   @default(true)
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+
+  @@index([code], map: "data_code_id")
+  @@index([site_id, date, code], map: "data_mix")
+  @@index([site_id], map: "data_site_id")
+  @@index([site_id, date, code], map: "idx_siteid_date_code_status")
+  @@index([date], map: "idx_tbl_upload_data_date")
+}
+
+model tbl_data_110 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime  @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean   @default(true)
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+
+  @@index([code], map: "data_code_id")
+  @@index([site_id, date, code], map: "data_mix")
+  @@index([site_id], map: "data_site_id")
+  @@index([site_id, date, code], map: "idx_siteid_date_code_status")
+  @@index([date], map: "idx_tbl_upload_data_date")
+}
+
+model tbl_data_113 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime? @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean?
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+}
+
+model tbl_data_14 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime  @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean   @default(true)
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+
+  @@index([code], map: "data_code_id")
+  @@index([site_id, date, code], map: "data_mix")
+  @@index([site_id], map: "data_site_id")
+  @@index([site_id, date, code, status], map: "idx_complex_upload_query")
+  @@index([site_id, date, code, status], map: "idx_siteid_date_code_status")
+  @@index([code, date(sort: Desc)], map: "idx_tbl_data_14_code_date")
+  @@index([date], map: "idx_tbl_data_14_date")
+  @@index([date, code], map: "idx_tbl_data_14_date_code")
+  @@index([code], map: "idx_tbl_data_51_code")
+  @@index([date], map: "idx_tbl_data_51_date")
+  @@index([date, code], map: "idx_tbl_data_51_date_code")
+  @@index([adddate], map: "idx_tbl_upload_data_adddate")
+  @@index([date], map: "idx_tbl_upload_data_date")
+  @@index([code, site_id, status], map: "idx_upload_data_code")
+  @@index([site_id, date, status], map: "idx_upload_data_site_date")
+  @@index([site_id, status, date], map: "idx_upload_data_site_status")
+}
+
+model tbl_data_5 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime  @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean   @default(true)
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+
+  @@index([code], map: "data_code_id")
+  @@index([site_id, date, code], map: "data_mix")
+  @@index([site_id], map: "data_site_id")
+  @@index([site_id, date, code, status], map: "idx_complex_upload_query")
+  @@index([site_id, date, code, status], map: "idx_siteid_date_code_status")
+  @@index([code], map: "idx_tbl_data_51_code")
+  @@index([date], map: "idx_tbl_data_51_date")
+  @@index([date, code], map: "idx_tbl_data_51_date_code")
+  @@index([adddate], map: "idx_tbl_upload_data_adddate")
+  @@index([date], map: "idx_tbl_upload_data_date")
+  @@index([code, site_id, status], map: "idx_upload_data_code")
+  @@index([site_id, date, status], map: "idx_upload_data_site_date")
+  @@index([site_id, status, date], map: "idx_upload_data_site_status")
+}
+
+model tbl_data_51 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime  @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean   @default(true)
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+
+  @@index([code], map: "data_code_id")
+  @@index([site_id, date, code], map: "data_mix")
+  @@index([site_id], map: "data_site_id")
+  @@index([site_id, date, code, status], map: "idx_complex_upload_query")
+  @@index([site_id, status, date, code], map: "idx_data_main")
+  @@index([site_id, date, code, status], map: "idx_siteid_date_code_status")
+  @@index([code], map: "idx_tbl_data_51_code")
+  @@index([date], map: "idx_tbl_data_51_date")
+  @@index([date, code], map: "idx_tbl_data_51_date_code")
+  @@index([adddate], map: "idx_tbl_upload_data_adddate")
+  @@index([date], map: "idx_tbl_upload_data_date")
+  @@index([code, site_id, status], map: "idx_upload_data_code")
+  @@index([site_id, date, status], map: "idx_upload_data_site_date")
+  @@index([site_id, status, date], map: "idx_upload_data_site_status")
+}
+
+model tbl_data_73 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime  @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean   @default(true)
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+
+  @@index([code], map: "data_code_id")
+  @@index([site_id, date, code], map: "data_mix")
+  @@index([site_id], map: "data_site_id")
+  @@index([site_id, date, code], map: "idx_siteid_date_code_status")
+  @@index([date], map: "idx_tbl_upload_data_date")
+}
+
+model tbl_data_75 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime  @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean   @default(true)
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+
+  @@index([code], map: "data_code_id")
+  @@index([site_id, date, code], map: "data_mix")
+  @@index([site_id], map: "data_site_id")
+  @@index([site_id, date, code, status], map: "idx_complex_upload_query")
+  @@index([site_id, date, code, status], map: "idx_siteid_date_code_status")
+  @@index([code], map: "idx_tbl_data_51_code")
+  @@index([date], map: "idx_tbl_data_51_date")
+  @@index([date, code], map: "idx_tbl_data_51_date_code")
+  @@index([adddate], map: "idx_tbl_upload_data_adddate")
+  @@index([date], map: "idx_tbl_upload_data_date")
+  @@index([code, site_id, status], map: "idx_upload_data_code")
+  @@index([site_id, date, status], map: "idx_upload_data_site_date")
+  @@index([site_id, status, date], map: "idx_upload_data_site_status")
+}
+
+model tbl_data_77 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime  @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean   @default(true)
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+
+  @@index([code], map: "data_code_id")
+  @@index([site_id, date, code], map: "data_mix")
+  @@index([site_id], map: "data_site_id")
+  @@index([site_id, date, code], map: "idx_siteid_date_code_status")
+  @@index([date], map: "idx_tbl_upload_data_date")
+}
+
+model tbl_data_82 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime  @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean   @default(true)
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+
+  @@index([code], map: "data_code_id")
+  @@index([site_id, date, code], map: "data_mix")
+  @@index([site_id], map: "data_site_id")
+  @@index([site_id, date, code, status], map: "idx_complex_upload_query")
+  @@index([site_id, date, code, status], map: "idx_siteid_date_code_status")
+  @@index([code], map: "idx_tbl_data_51_code")
+  @@index([date], map: "idx_tbl_data_51_date")
+  @@index([date, code], map: "idx_tbl_data_51_date_code")
+  @@index([adddate], map: "idx_tbl_upload_data_adddate")
+  @@index([date], map: "idx_tbl_upload_data_date")
+  @@index([code, site_id, status], map: "idx_upload_data_code")
+  @@index([site_id, date, status], map: "idx_upload_data_site_date")
+  @@index([site_id, status, date], map: "idx_upload_data_site_status")
+}
+
+model tbl_data_85 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime  @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean   @default(true)
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+
+  @@index([code], map: "data_code_id")
+  @@index([site_id, date, code], map: "data_mix")
+  @@index([site_id], map: "data_site_id")
+  @@index([site_id, date, code], map: "idx_siteid_date_code_status")
+  @@index([date], map: "idx_tbl_upload_data_date")
+}
+
+model tbl_data_9 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime? @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean?
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+}
+
+model tbl_data_90 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime  @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean   @default(true)
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+
+  @@index([code], map: "data_code_id")
+  @@index([site_id, date, code], map: "data_mix")
+  @@index([site_id], map: "data_site_id")
+  @@index([site_id, date, code, status], map: "idx_complex_upload_query")
+  @@index([site_id, date, code, status], map: "idx_siteid_date_code_status")
+  @@index([code], map: "idx_tbl_data_51_code")
+  @@index([date], map: "idx_tbl_data_51_date")
+  @@index([date, code], map: "idx_tbl_data_51_date_code")
+  @@index([adddate], map: "idx_tbl_upload_data_adddate")
+  @@index([date], map: "idx_tbl_upload_data_date")
+  @@index([code, site_id, status], map: "idx_upload_data_code")
+  @@index([site_id, date, status], map: "idx_upload_data_site_date")
+  @@index([site_id, status, date], map: "idx_upload_data_site_status")
+}
+
+model tbl_data_93 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime  @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean   @default(true)
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+
+  @@index([code], map: "data_code_id")
+  @@index([site_id, date, code], map: "data_mix")
+  @@index([site_id], map: "data_site_id")
+  @@index([site_id, date, code, status], map: "idx_complex_upload_query")
+  @@index([site_id, date, code, status], map: "idx_siteid_date_code_status")
+  @@index([code], map: "idx_tbl_data_51_code")
+  @@index([date], map: "idx_tbl_data_51_date")
+  @@index([date, code], map: "idx_tbl_data_51_date_code")
+  @@index([adddate], map: "idx_tbl_upload_data_adddate")
+  @@index([date], map: "idx_tbl_upload_data_date")
+  @@index([code, site_id, status], map: "idx_upload_data_code")
+  @@index([site_id, date, status], map: "idx_upload_data_site_date")
+  @@index([site_id, status, date], map: "idx_upload_data_site_status")
+}
+
+model tbl_data_94 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime  @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean   @default(true)
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+
+  @@index([code], map: "data_code_id")
+  @@index([site_id, date, code], map: "data_mix")
+  @@index([site_id], map: "data_site_id")
+  @@index([site_id, date, code], map: "idx_siteid_date_code_status")
+  @@index([date], map: "idx_tbl_upload_data_date")
+}
+
+model tbl_data_95 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime  @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean   @default(true)
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+
+  @@index([code], map: "data_code_id")
+  @@index([site_id, date, code], map: "data_mix")
+  @@index([site_id], map: "data_site_id")
+  @@index([site_id, date, code], map: "idx_siteid_date_code_status")
+  @@index([date], map: "idx_tbl_upload_data_date")
+}
+
+model tbl_data_97 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime  @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean   @default(true)
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+
+  @@index([code], map: "data_code_id")
+  @@index([site_id, date, code], map: "data_mix")
+  @@index([site_id], map: "data_site_id")
+  @@index([site_id, date, code], map: "idx_siteid_date_code_status")
+  @@index([date], map: "idx_tbl_upload_data_date")
+}
+
+model tbl_equipment_category {
+  eqcat_id      Int      @id @default(autoincrement())
+  site_id       Int?
+  category_name String?  @db.VarChar(255)
+  cat_status    Boolean? @default(true)
+}
+
+model tbl_equipment_product {
+  eqprod_id   Int      @id @default(autoincrement())
+  eqcat_id    Int?
+  site_id     Int?
+  type        String?  @db.VarChar(255)
+  tag_id      String?  @db.VarChar(255)
+  description String?  @db.VarChar(255)
+  tag_text    String?  @db.VarChar(255)
+  prod_status Boolean? @default(true)
+
+  @@index([site_id, prod_status], map: "idx_equipment_site_status")
+}
+
+model tbl_global_actions {
+  global_action_id Int       @id @default(autoincrement())
+  label            String    @db.VarChar(255)
+  dateandtime      DateTime? @default(now()) @db.DateTime(0)
+  status           String?   @default("active") @db.VarChar(50)
+}
+
+model tbl_images {
+  image_id   Int      @id @default(autoincrement())
+  user_id    Int
+  image      String   @db.VarChar(300)
+  ip_address String   @db.VarChar(300)
+  date       DateTime @db.DateTime(0)
+  status     Int
+  s3_key     String?  @db.VarChar(500)
+  s3_url     String?  @db.VarChar(1000)
+
+  @@index([user_id, status], map: "idx_tbl_images_user_status")
+  @@index([user_id], map: "user_id")
+}
+
+model tbl_library_corp_category {
+  library_category_id Int     @id @default(autoincrement())
+  corporation_id      Int?
+  lib_category_id     Int?
+  corp_cat_id         Int?
+  category_name       String? @db.VarChar(100)
+  status              Int?    @default(0) @db.TinyInt
+
+  @@index([corp_cat_id], map: "idx_lib_corp_cat_corp_cat")
+  @@index([corporation_id, status], map: "idx_lib_corp_cat_corp_status")
+}
+
+model tbl_mix_dashboard_module {
+  dashboard_module_id Int     @id @default(autoincrement())
+  dashboard_id        Int?
+  panel_id            Int?
+  site_id             Int?
+  module_id           Int?
+  module_code         String? @db.VarChar(255)
+  module_name         String? @db.VarChar(255)
+  position            String? @db.VarChar(255)
+  channel             Int?
+  status              Int?    @default(1) @db.TinyInt
+
+  @@index([dashboard_id], map: "dashboard_id_index")
+  @@index([dashboard_id], map: "idx_dashboard_id")
+  @@index([dashboard_id, panel_id, site_id, status], map: "idx_dashboardid_panelid_siteid_status")
+  @@index([module_code, status], map: "idx_module_code")
+  @@index([dashboard_id, status], map: "idx_module_dashboard")
+  @@index([panel_id, module_id, status], map: "idx_module_panel")
+  @@index([dashboard_id, panel_id, status], map: "idx_module_panel_dashboard")
+}
+
+model tbl_mix_dashboard_parameter {
+  id               Int     @id @default(autoincrement())
+  dashboard_id     Int?
+  panel_id         Int?
+  site_id          Int?
+  parameter_id     Int?
+  parameter_mix_id String? @db.VarChar(25)
+  module_id        Int?
+  module_code      String? @db.VarChar(255)
+  module_name      String? @db.VarChar(255)
+  parameter_code   String? @db.VarChar(45)
+  position         String? @db.VarChar(255)
+  channel          Int?
+  score_type       String? @db.VarChar(100)
+  status           Int?    @default(1) @db.TinyInt
+
+  @@index([dashboard_id], map: "dashboard_id_index")
+  @@index([dashboard_id], map: "idx_dashboard_id")
+  @@index([dashboard_id, panel_id, module_id], map: "idx_dashboard_parameter")
+  @@index([parameter_code, dashboard_id], map: "idx_dashboard_parameter_code")
+  @@index([dashboard_id, panel_id, module_id, status], map: "idx_dashboardid_panelid_moduleid_status")
+  @@index([dashboard_id, panel_id, module_id, status], map: "idx_parameter_dashboard_panel_module")
+}
+
+model tbl_mix_dashboard_site {
+  id           Int  @id @default(autoincrement())
+  site_id      Int?
+  dashboard_id Int?
+  status       Int? @default(1) @db.TinyInt
+
+  @@index([dashboard_id], map: "index_dashboard_id")
+}
+
+model tbl_mix_opex_dashboard_module {
+  dashboard_module_id Int     @id @default(autoincrement())
+  dashboard_id        Int?
+  panel_id            Int?
+  site_id             Int?
+  module_id           Int?
+  module_code         String? @db.VarChar(255)
+  module_name         String? @db.VarChar(255)
+  status              Int?    @default(1)
+
+  @@index([dashboard_id], map: "idx_dashboard_id")
+  @@index([dashboard_id], map: "index_dashboard_id")
+}
+
+model tbl_mix_opex_dashboard_parameter {
+  id             Int     @id @default(autoincrement())
+  dashboard_id   Int?
+  panel_id       Int?
+  site_id        Int?
+  parameter_id   Int?
+  parameter_code String? @db.VarChar(40)
+  module_id      Int?
+  module_code    String? @db.VarChar(255)
+  formula        Int?
+  total_price    Int?
+  price_per_unit Int?
+  consumption    Int?
+  daily_cost     Int?
+  status         Int?    @default(1) @db.TinyInt
+
+  @@index([dashboard_id], map: "idx_dashboard_id")
+  @@index([dashboard_id], map: "index_dashboard_id")
+}
+
+model tbl_mix_report {
+  report_id      Int       @id @default(autoincrement())
+  dashboard_id   Json?
+  corporation_id Int?
+  category_id    Int?
+  dash_id        Int?
+  report_name    String?   @db.VarChar(255)
+  site_id        Int?
+  user_id        Int?
+  is_dashboard   Int?      @default(0) @db.TinyInt
+  report_type    Int?      @default(1) @db.TinyInt
+  links          Json?
+  type           Int?      @default(0)
+  status         Int?      @default(1) @db.TinyInt
+  created_on     DateTime? @db.DateTime(0)
+  attached_user  Json?
+
+  @@index([corporation_id, status], map: "idx_corporationid_status")
+  @@index([corporation_id, type, status], map: "idx_corporationid_type_status")
+  @@index([site_id, report_type, corporation_id, status, type], map: "idx_mix_report_complex")
+  @@index([corporation_id, type, status], map: "idx_mix_report_corporation_type_status")
+  @@index([site_id], map: "idx_mix_report_site")
+  @@index([site_id, status], map: "idx_mix_report_site_status")
+  @@index([site_id, report_type, status], map: "idx_mix_report_site_type_status")
+  @@index([site_id, report_type, status], map: "idx_siteid_reporttype_status")
+  @@index([report_id], map: "index_report_id")
+}
+
+model tbl_mix_report_dashboard {
+  dashboard_id     Int       @id @default(autoincrement())
+  site_id          Int?
+  corporation_id   Int?      @default(0)
+  dashboard_name   String?   @db.VarChar(255)
+  report_title     String?   @db.VarChar(255)
+  category_id      Int?      @default(0)
+  dashboard_desc   String?   @db.VarChar(255)
+  selected_layout  Int?
+  stat_formula     String?   @db.Text
+  rolling_status   Int?
+  rolling_count    Int?
+  report_type      Int?      @default(1) @db.TinyInt
+  created_by       Int?
+  created_datetime DateTime? @db.DateTime(0)
+  ip_address       String?   @db.VarChar(255)
+  dashdata         String?   @db.LongText
+  preview_status   Int?
+  status           Int?      @default(1) @db.TinyInt
+
+  @@index([category_id], map: "idx_category_id")
+  @@index([dashboard_id, site_id, status, created_datetime], map: "idx_complex_dashboard_query")
+  @@index([corporation_id], map: "idx_corporation_id")
+  @@index([corporation_id, status], map: "idx_dashboard_corporation")
+  @@index([dashboard_id], map: "idx_dashboard_id")
+  @@index([dashboard_id, status], map: "idx_dashboard_id_status")
+  @@index([dashboard_id, status], map: "idx_dashboard_primary")
+  @@index([dashboard_id, site_id, status], map: "idx_dashboard_site")
+  @@index([site_id], map: "idx_site_id")
+  @@index([site_id, status], map: "idx_site_id_status")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model tbl_mix_report_dashboard_pannel {
+  pannel_id          Int     @id @default(autoincrement())
+  dashboard_id       Int?
+  section_id         Int?
+  show_total         Int?
+  show_benchmark     Int?
+  stat_type          Int?
+  setPoint           Int?
+  detailed_frequency Int?
+  custom_interval    String? @db.VarChar(45)
+  type               String? @db.VarChar(255)
+  graph              Int?
+  formula            Int?
+  panel_seq          Int?    @db.TinyInt
+  ismodulescore      Int?    @default(0) @db.TinyInt
+  status             Int?    @default(1) @db.TinyInt
+  ai_query           String? @db.Text
+
+  @@index([dashboard_id], map: "idx_dashboard_id")
+  @@index([dashboard_id, status], map: "idx_panel_dashboard")
+  @@index([section_id, pannel_id, status], map: "idx_panel_section")
+  @@index([section_id, dashboard_id, status], map: "idx_panel_section_dashboard")
+  @@index([type, status], map: "idx_panel_type")
+  @@index([section_id, dashboard_id, status], map: "idx_sectionid_dashboardid_status")
+  @@index([dashboard_id], map: "index_dashboard_id")
+}
+
+model tbl_mix_report_log {
+  id      Int      @id @default(autoincrement())
+  purpose String?  @db.VarChar(255)
+  request String?  @db.Text
+  date    DateTime @db.DateTime(0)
+  status  Int?     @db.TinyInt
+}
+
+model tbl_mix_section {
+  section_id         Int       @id @default(autoincrement())
+  sectiontitle       String?   @db.VarChar(255)
+  section_seq        Int?
+  dashboard_id       Int?
+  detailed_frequency Int?      @default(0)
+  frequency_interval Int?
+  sectionDesc        String?   @db.Text
+  is_calender        Int?      @default(0)
+  start_date         DateTime? @db.Date
+  end_date           DateTime? @db.Date
+  last_limit         Int?      @default(0)
+  last_type          Int?      @default(1)
+  hlink              Int?
+  sectext            String?   @db.Text
+  alert_day          Int?      @default(0)
+  status             Int?      @default(1)
+
+  @@index([dashboard_id, section_id, status, detailed_frequency], map: "idx_complex_section_query")
+  @@index([dashboard_id], map: "idx_dashboard_id")
+  @@index([dashboard_id, status], map: "idx_dashboardid_status")
+  @@index([dashboard_id, status], map: "idx_section_dashboard")
+  @@index([detailed_frequency, status], map: "idx_section_frequency")
+  @@index([dashboard_id], map: "index_dashboard_id")
+}
+
+model tbl_mix_send_report {
+  id           Int       @id @default(autoincrement())
+  email        String?   @db.VarChar(255)
+  created_by   Int?
+  created_date DateTime? @db.DateTime(6)
+  dashboard_id Int?
+  site_id      Int?
+}
+
+model tbl_mix_site_pannel {
+  id           Int  @id @default(autoincrement())
+  site_id      Int?
+  pannel_id    Int?
+  dashboard_id Int?
+  status       Int? @default(1) @db.TinyInt
+
+  @@index([pannel_id], map: "index_pannel_id")
+}
+
+model tbl_notifications {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  user_id    Int?
+  site_id    Int?
+  severity   String?   @db.VarChar(250)
+  type       String?   @db.VarChar(250)
+  message    String?   @db.VarChar(250)
+  ip_address String?   @db.VarChar(100)
+  action_url String?   @db.VarChar(50)
+  metadata   String?   @db.VarChar(255)
+  status     Boolean?
+  timestamp  DateTime? @db.DateTime(0)
+}
+
+model tbl_opex_dashboard {
+  opex_dashboard_id Int       @id @default(autoincrement())
+  corporation_id    Int?
+  site_id           Int?
+  dashboard_name    String?   @db.VarChar(255)
+  dashboard_desc    String?   @db.Text
+  selected_layout   Boolean?
+  created_by        Int?
+  created_datetime  DateTime? @db.DateTime(0)
+  ip_address        String?   @db.VarChar(100)
+  status            Boolean?  @default(true)
+
+  @@index([site_id, status], map: "idx_opex_dashboard_site_status")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model tbl_opex_dashboard_module {
+  dashboard_module_id     Int      @id @default(autoincrement())
+  opex_dashboard_id       Int?
+  panel_id                Int?
+  site_id                 Int?
+  module_id               Int?
+  module_code             String?  @db.VarChar(4)
+  module_name             String?  @db.VarChar(100)
+  dashboard_module_status Boolean? @default(true)
+}
+
+model tbl_opex_dashboard_pannel {
+  pannel_id         Int      @id @default(autoincrement())
+  opex_dashboard_id Int?
+  site_id           Int?
+  panel_seq         Int?
+  description       String?  @db.Text
+  panel_type        String?  @db.VarChar(100)
+  line_graph        Boolean?
+  bar_graph         Boolean?
+  pie_graph         Boolean?
+  stat_functions    String   @db.Text
+  rolling_status    Boolean
+  rolling_count     Int
+  status            Boolean? @default(true)
+  report_type       Int?
+}
+
+model tbl_opex_dashboard_parameter {
+  id                Int     @id @default(autoincrement())
+  opex_dashboard_id Int?
+  panel_id          Int?
+  site_id           Int?
+  parameter_code    String? @db.VarChar(255)
+  total_quantity    Int?    @default(0)
+  module_code       String? @db.VarChar(255)
+  formula           Int?
+  total_price       Int?
+  price_per_unit    Int?
+  consumption       Int?
+  daily_cost        Int?
+  status            Int?    @default(1)
+}
+
+model tbl_opex_price_hour {
+  id      Int    @id @default(autoincrement())
+  site_id Int?
+  hour    String @db.VarChar(255)
+}
+
+model tbl_opex_upload_data {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  date       DateTime  @db.DateTime(0)
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  sampleId   String?   @db.VarChar(100)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  uploaddate DateTime? @db.DateTime(0)
+  status     Boolean   @default(true)
+
+  @@index([site_id, date, code, status], map: "idx_siteid_date_code_status_opex")
+}
+
+model tbl_opex_upload_price {
+  id      Int       @id @default(autoincrement())
+  site_id Int?
+  code    String?   @db.VarChar(100)
+  price   String?   @db.VarChar(50)
+  value   String?   @db.VarChar(50)
+  adddate DateTime? @db.DateTime(0)
+  status  Boolean
+
+  @@index([site_id, adddate, code, status], map: "idx_siteid_adddate_code_status_opexprice")
+}
+
+model tbl_opex_upload_price_hour {
+  id         Int       @id @default(autoincrement())
+  uploadId   String?   @db.VarChar(150)
+  site_id    Int?
+  hourId     Int
+  weekday    Int       @db.TinyInt
+  code       String?   @db.VarChar(50)
+  price      String    @db.VarChar(50)
+  added_by   Int?
+  adddate    DateTime? @db.DateTime(0)
+  uploaddate DateTime? @db.DateTime(0)
+  status     Boolean
+}
+
+model tbl_otp_dms {
+  otp_id     Int       @id @default(autoincrement())
+  mobile     String?   @db.VarChar(255)
+  email      String?   @db.VarChar(255)
+  otp        String?   @db.Text
+  user_id    Int?
+  status     Boolean?
+  ip_address String?   @db.VarChar(100)
+  location   String?   @db.VarChar(255)
+  created_at DateTime? @db.DateTime(0)
+}
+
+model tbl_periodic_report {
+  report_id   Int     @id @default(autoincrement())
+  report_name String? @db.VarChar(255)
+  site_id     Int?
+  user_id     Int?
+  status      Int?    @default(1) @db.TinyInt
+
+  @@index([report_id], map: "index_report_id")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model tbl_role {
+  role_id           Int                 @id @default(autoincrement())
+  role_name         String?             @db.VarChar(50)
+  role_description  String?             @db.Text
+  created_by        Int?                @db.UnsignedInt
+  created_date      DateTime?           @db.DateTime(0)
+  ip_address        String?             @db.VarChar(100)
+  role_status       Boolean?            @default(true)
+  report_permission report_permission[]
+}
+
+model tbl_site {
+  site_id              Int       @id @default(autoincrement())
+  corp_cat_id          Int?
+  site_name            String?   @db.VarChar(255)
+  site_description     String?   @db.Text
+  site_address         String?   @db.VarChar(255)
+  site_phone           String?   @db.VarChar(100)
+  site_currency        String?   @db.VarChar(50)
+  channel_count        Int
+  position_count       Int
+  sitepfd              String?   @db.VarChar(255)
+  created_by           Int?
+  created_datetime     DateTime? @db.DateTime(0)
+  operation_ip_address String?   @db.VarChar(100)
+  multichannel         Int       @default(0) @db.TinyInt
+  isgroup              Int       @default(0) @db.TinyInt
+  iszero               Int       @default(0) @db.TinyInt
+  site_condition       String?   @db.Text
+  isnulls              Int       @default(0) @db.TinyInt
+  goption              Boolean?  @default(false)
+  type                 Int       @default(0) @db.TinyInt
+  site_latitude        String?   @db.VarChar(100)
+  site_longitude       String?   @db.VarChar(100)
+  updated_on           DateTime? @db.DateTime(0)
+  bidata               String    @db.LongText
+  dashdata             String    @db.LongText
+  apikey               String?   @db.VarChar(1000)
+  assistantid          String?   @db.VarChar(100)
+  threadid             String?   @db.VarChar(500)
+  site_status          Boolean?  @default(true)
+  site_edit_status     Boolean?  @default(false)
+
+  @@index([corp_cat_id], map: "idx_site_corp_cat")
+  @@index([site_id], map: "idx_site_primary")
+  @@index([site_id], map: "idx_site_site_id")
+  @@index([site_status], map: "idx_site_status")
+}
+
+model tbl_site_agentuser {
+  id       Int @id @default(autoincrement())
+  user_id  Int
+  agent_id Int
+  site_id  Int
+  chgPwd   Int @default(0) @db.TinyInt
+  status   Int @db.TinyInt
+}
+
+model tbl_site_channel {
+  site_channel_id Int      @id @default(autoincrement())
+  site_id         Int
+  created_date    DateTime @db.DateTime(0)
+  status          Boolean
+}
+
+model tbl_site_group {
+  group_id      Int       @id @default(autoincrement())
+  name          String?   @db.VarChar(255)
+  site_id       Int
+  type          Int       @default(0) @db.TinyInt
+  groupPosition String?   @db.VarChar(20)
+  status        Int?      @default(0) @db.TinyInt
+  adddate       DateTime? @db.DateTime(0)
+}
+
+model tbl_site_grp_module {
+  site_module_grp_id Int       @id @default(autoincrement())
+  site_id            Int
+  site_module_code   String    @db.VarChar(40)
+  grp_id             Int
+  weight             Int?
+  modulePosition     String?   @db.VarChar(20)
+  status             Boolean   @default(false)
+  adddate            DateTime? @db.DateTime(0)
+}
+
+model tbl_site_grp_module_range {
+  site_grp_module_range_id Int      @id @default(autoincrement()) @db.UnsignedInt
+  site_id                  Int?
+  channel                  Int
+  position                 String   @db.VarChar(50)
+  site_module_id           Int
+  module_range_name        String?  @db.VarChar(50)
+  weight                   Int?
+  range_score              String?  @db.VarChar(50)
+  range_min                String?  @db.VarChar(50)
+  range_max                String?  @db.VarChar(50)
+  module_range_status      Boolean? @default(true)
+}
+
+model tbl_site_lab_agent {
+  id          Int      @id @default(autoincrement())
+  site_id     Int
+  source_type String   @db.VarChar(255)
+  source_name String   @db.VarChar(255)
+  email       String   @db.VarChar(255)
+  phone       String   @db.VarChar(100)
+  details     String   @db.Text
+  addDate     DateTime @default(now()) @db.DateTime(0)
+  status      Boolean  @default(true)
+}
+
+model tbl_site_labopex_report {
+  id                   Int      @id @default(autoincrement())
+  site_id              Int
+  site_opexmodule_code String   @db.VarChar(50)
+  report_type          Int      @db.TinyInt
+  report_name          String   @db.VarChar(255)
+  agent_id             Int
+  grouptext            String?  @db.VarChar(255)
+  created_by           Int      @db.TinyInt
+  created_date         DateTime @db.DateTime(0)
+  ip_address           String   @db.VarChar(255)
+  status               Int      @db.TinyInt
+}
+
+model tbl_site_labprocess_module_parameter {
+  id                         Int     @id @default(autoincrement())
+  site_id                    Int
+  site_module_code           String  @db.VarChar(50)
+  report_id                  Int
+  position                   String  @db.VarChar(10)
+  channel                    Int     @db.TinyInt
+  site_module_parameter_code String  @db.VarChar(10)
+  lab_id                     String? @db.VarChar(100)
+  status                     Int     @default(1) @db.TinyInt
+}
+
+model tbl_site_labprocess_report {
+  id               Int      @id @default(autoincrement())
+  site_id          Int
+  site_module_code String   @db.VarChar(50)
+  report_type      Int      @db.TinyInt
+  report_name      String   @db.VarChar(255)
+  position         String   @db.VarChar(10)
+  channel          Int      @db.TinyInt
+  agent_id         Int?
+  grouptext        String?  @db.VarChar(255)
+  created_by       Int      @db.TinyInt
+  created_date     DateTime @db.DateTime(0)
+  ip_address       String   @db.VarChar(100)
+  status           Int      @default(1) @db.TinyInt
+}
+
+model tbl_site_log {
+  id           Int      @id @default(autoincrement())
+  purpose      String?  @db.VarChar(255)
+  request      String?  @db.LongText
+  created_date DateTime @db.DateTime(0)
+  status       Boolean? @default(true)
+}
+
+model tbl_site_module {
+  site_module_id     Int      @id @default(autoincrement())
+  site_id            Int?     @db.UnsignedInt
+  channel            Int
+  position           String   @db.VarChar(50)
+  module_code        String?  @db.VarChar(40)
+  module_name        String?  @db.VarChar(100)
+  module_id          Int
+  module_alias       String   @db.VarChar(255)
+  module_type        String?  @db.VarChar(100)
+  module_type_id     Int
+  top_module         Boolean?
+  module_priority    Int?
+  module_weight      Int?
+  start              String?  @db.Text
+  end                String?  @db.Text
+  porder             Int
+  adddate            DateTime @default(now()) @db.DateTime(0)
+  site_module_status Boolean? @default(true)
+
+  @@index([site_id, site_module_status, channel], map: "idx_site_module_site_status_channel")
+  @@index([site_id, site_module_status, position, channel], map: "idx_site_module_site_status_position")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model tbl_site_module_parameter {
+  site_module_parameter_id     Int      @id @default(autoincrement())
+  site_id                      Int?
+  channel                      Int
+  position                     String   @db.VarChar(50)
+  site_module_id               Int?
+  site_module_code             String?  @db.VarChar(40)
+  parameter_name               String?  @db.VarChar(50)
+  parameter_id                 Int
+  parameter_mix_id             String   @db.VarChar(255)
+  parameter_type               Boolean?
+  parameter_weight             Int?
+  parameter_code               String?  @db.VarChar(40)
+  parameter_formula            String?  @db.Text
+  parameter_delta              String?  @db.Text
+  parameter_unit               String?  @db.VarChar(50)
+  parameter_banchmark          String?  @db.VarChar(50)
+  parameter_critical           Boolean?
+  parameter_mcr                Boolean  @default(false)
+  instruction                  String?  @db.Text
+  parameter_query              String?  @db.Text
+  upload_source                Boolean? @default(false)
+  adddate                      DateTime @default(now()) @db.DateTime(0)
+  site_module_parameter_status Boolean? @default(true)
+
+  @@index([site_id, parameter_type, site_module_parameter_status, parameter_code], map: "idx_param_main")
+  @@index([parameter_code, site_module_parameter_status], map: "idx_parameter_code")
+  @@index([site_module_code, site_module_parameter_status], map: "idx_parameter_module")
+  @@index([site_id, site_module_parameter_status], map: "idx_parameter_site")
+  @@index([site_id], map: "site_id_index")
+  @@index([site_module_id], map: "site_module_id_index")
+}
+
+model tbl_site_module_parameter_range {
+  site_module_parameter_range_id Int      @id @default(autoincrement()) @db.UnsignedInt
+  site_id                        Int?
+  channel                        Int
+  position                       String   @db.VarChar(50)
+  site_module_id                 Int
+  site_module_parameter_id       Int?
+  parameter_range_name           String?  @db.VarChar(50)
+  range_score                    String?  @db.VarChar(50)
+  range_min                      String?  @db.VarChar(50)
+  range_max                      String?  @db.VarChar(50)
+  parameterquery                 String?  @db.Text
+  adddate                        DateTime @default(now()) @db.DateTime(0)
+  parameter_range_status         Boolean? @default(true)
+
+  @@index([site_module_parameter_id], map: "site_module_parameter_id_index")
+}
+
+model tbl_site_module_score {
+  module_score_id  Int      @id @default(autoincrement()) @db.UnsignedInt
+  site_id          Int?     @db.UnsignedInt
+  site_module_id   Int?     @db.UnsignedInt
+  low_range_min    String?  @db.VarChar(10)
+  low_range_max    String?  @db.VarChar(10)
+  mid_range_min    String?  @db.VarChar(10)
+  mid_range_max    String?  @db.VarChar(10)
+  high_range_min   String?  @db.VarChar(10)
+  high_range_max   String?  @db.VarChar(10)
+  low_range_color  String   @db.VarChar(10)
+  mid_range_color  String   @db.VarChar(10)
+  high_range_color String   @db.VarChar(10)
+  adddate          DateTime @default(now()) @db.DateTime(0)
+  score_status     Boolean? @default(true)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model tbl_site_opex_module {
+  site_opex_module_id Int      @id @default(autoincrement())
+  site_id             Int?     @db.UnsignedInt
+  module_name         String?  @db.VarChar(100)
+  module_id           Int
+  module_description  String?  @db.Text
+  module_code         String?  @db.VarChar(4)
+  adddate             DateTime @default(now()) @db.DateTime(0)
+  site_module_status  Boolean? @default(true)
+
+  @@index([site_id, site_module_status, module_code], map: "idx_opex_module_site_status")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model tbl_site_opex_module_parameter {
+  site_opex_module_parameter_id Int      @id @default(autoincrement())
+  site_id                       Int?
+  site_opex_module_id           Int?
+  site_opex_module_code         String?  @db.VarChar(40)
+  parameter_name                String?  @db.VarChar(50)
+  parameter_id                  Int
+  parameter_type                Boolean?
+  details                       String?  @db.Text
+  parameter_code                String?  @db.VarChar(40)
+  parameter_formula             String?  @db.Text
+  parameter_unit                String?  @db.VarChar(50)
+  price                         String?  @db.VarChar(11)
+  price_type                    Boolean  @default(false)
+  upload_source                 Boolean? @default(false)
+  parameter_banchmark           String?  @db.VarChar(50)
+  adddate                       DateTime @default(now()) @db.DateTime(0)
+  site_module_parameter_status  Boolean? @default(true)
+
+  @@index([site_opex_module_id], map: "site_opex_module_id_index")
+}
+
+model tbl_site_opexlabmodule_parameter {
+  id                             Int    @id @default(autoincrement())
+  site_id                        Int
+  site_opexmodule_code           String @db.VarChar(50)
+  report_id                      Int
+  site_opexmodule_parameter_code String @db.VarChar(50)
+  status                         Int    @db.TinyInt
+}
+
+model tbl_site_opexmodule_parameter_report {
+  id                             Int      @id @default(autoincrement())
+  site_id                        Int?
+  site_opexmodule_code           String?  @db.VarChar(40)
+  report_id                      Int?
+  site_opexmodule_parameter_code String?  @db.VarChar(40)
+  status                         Boolean?
+}
+
+model tbl_site_opexmodule_report {
+  report_id            Int       @id @default(autoincrement())
+  site_id              Int?
+  site_opexmodule_code String?   @db.VarChar(40)
+  report_type          Boolean?
+  report_name          String?   @db.VarChar(100)
+  total_quantity       Boolean?
+  price_per_unit       Boolean?
+  total_price          Boolean?
+  consumption          Boolean?
+  daily_cost           Boolean?
+  stat_functions       String?   @db.Text
+  rolling_status       Boolean?
+  rolling_count        Int?
+  created_by           Int?
+  created_date         DateTime? @db.DateTime(0)
+  ip_address           String?   @db.VarChar(100)
+  report_status        Boolean?  @default(true)
+
+  @@index([site_id, report_status], map: "idx_opex_report_site_status")
+}
+
+model tbl_site_payload_log {
+  id      Int      @id @default(autoincrement())
+  site_id Int
+  purpose String   @db.VarChar(100)
+  payload String   @db.LongText
+  adddate DateTime @default(now()) @db.DateTime(0)
+  status  Int      @default(1) @db.TinyInt
+}
+
+model tbl_site_processmodule_data {
+  id               Int      @id @default(autoincrement())
+  site_id          Int
+  site_module_code String   @db.VarChar(50)
+  bidata           String   @db.LongText
+  date             DateTime @db.DateTime(0)
+  status           Int      @db.TinyInt
+}
+
+model tbl_site_processmodule_parameter_report {
+  id                         Int     @id @default(autoincrement())
+  site_id                    Int?
+  site_module_code           String? @db.VarChar(40)
+  report_id                  Int?
+  site_module_parameter_code String? @db.VarChar(40)
+  channel                    Int?
+  position                   String? @db.VarChar(50)
+  benchmark                  String? @db.VarChar(50)
+  status                     Int
+
+  @@index([site_id], map: "site_id_index")
+}
+
+model tbl_site_processmodule_report {
+  report_id        Int       @id @default(autoincrement())
+  site_id          Int?
+  site_module_code String?   @db.VarChar(40)
+  report_type      Int?
+  report_name      String?   @db.VarChar(100)
+  graph_type       Int?
+  channel          Int?
+  position         String?   @db.VarChar(50)
+  stat_functions   String?   @db.Text
+  rolling_status   Boolean?
+  rolling_count    Int?
+  lab_id           String?   @db.VarChar(100)
+  is_calender      Int?      @default(0)
+  start_date       DateTime? @db.Date
+  end_date         DateTime? @db.Date
+  last_limit       Int?      @default(0)
+  last_type        Int?      @default(0)
+  frequency_type   Int?      @default(0)
+  created_by       Int?
+  created_date     DateTime? @db.DateTime(0)
+  ip_address       String?   @db.VarChar(100)
+  report_status    Boolean?  @default(true)
+
+  @@index([site_id, report_status], map: "idx_process_report_site_status")
+}
+
+model tbl_site_project {
+  project_id   Int       @id @default(autoincrement())
+  project_name String?   @db.VarChar(255)
+  site_id      Int?
+  start_date   DateTime? @db.DateTime(0)
+  end_date     DateTime? @db.DateTime(0)
+  date         DateTime? @db.DateTime(0)
+  status       Int?      @default(1)
+}
+
+model tbl_site_sub_grp_module {
+  site_module_sub_grp_id Int       @id @default(autoincrement())
+  site_id                Int
+  site_module_code       String    @db.VarChar(20)
+  sub_grp_id             Int
+  weight                 Int
+  modulePosition         String?   @db.VarChar(20)
+  status                 Boolean   @default(false)
+  adddate                DateTime? @db.DateTime(0)
+}
+
+model tbl_site_subgroup {
+  subgroup_id      Int       @id @default(autoincrement())
+  group_id         Int?
+  site_id          Int
+  name             String?   @db.VarChar(255)
+  weight           Int?
+  subgroupPosition String?   @db.VarChar(20)
+  status           Int       @default(0) @db.TinyInt
+  adddate          DateTime? @db.DateTime(0)
+}
+
+model tbl_site_subgrp_module_range {
+  site_subgrp_module_range_id Int      @id @default(autoincrement()) @db.UnsignedInt
+  site_id                     Int?
+  channel                     Int
+  position                    String   @db.VarChar(50)
+  site_module_id              Int
+  module_range_name           String?  @db.VarChar(50)
+  weight                      Int?
+  range_score                 String?  @db.VarChar(50)
+  range_min                   String?  @db.VarChar(50)
+  range_max                   String?  @db.VarChar(50)
+  module_range_status         Boolean? @default(true)
+}
+
+model tbl_siteuser {
+  siteconf_id Int      @id @default(autoincrement()) @db.UnsignedInt
+  user_id     Int?     @db.UnsignedInt
+  site_id     Int?     @db.UnsignedInt
+  status      Boolean? @default(true)
+
+  @@index([site_id, status], map: "idx_siteuser_site_status")
+  @@index([status, site_id], map: "idx_siteuser_status_site")
+  @@index([user_id], map: "idx_siteuser_user_id")
+}
+
+model tbl_sub_topic {
+  sub_topic_id     Int       @id @default(autoincrement())
+  site_id          Int?
+  topic_id         Int?
+  sub_topic_name   String?   @db.VarChar(255)
+  secondary_prompt String?   @db.LongText
+  is_system        Boolean?
+  status           Boolean?
+  created_date     DateTime? @db.DateTime(0)
+  updated_on       DateTime? @db.DateTime(0)
+}
+
+model tbl_sub_topic_site {
+  sub_topic_id     Int       @id @default(autoincrement())
+  site_id          Int?
+  topic_id         Int?
+  sub_topic_name   String?   @db.VarChar(255)
+  secondary_prompt String?   @db.LongText
+  is_system        Boolean?
+  status           Boolean?
+  created_date     DateTime? @db.DateTime(0)
+  updated_on       DateTime? @db.DateTime(0)
+}
+
+model tbl_sys_score {
+  sys_score_id     Int       @id @default(autoincrement())
+  site_id          Int?
+  module_id        String?   @db.VarChar(100)
+  param_id         String?   @db.VarChar(100)
+  module_score     String?   @db.VarChar(100)
+  param_score      String?   @db.VarChar(100)
+  sys_score_date   DateTime? @db.DateTime(0)
+  sys_score_status Boolean?  @default(true)
+
+  @@index([site_id, module_id], map: "idx_tbl_sys_score_site_id_module_id")
+  @@index([site_id, sys_score_date, module_id, module_score], map: "idx_tbl_sys_score_site_id_sys_score_date_module_id_module_score")
+}
+
+model tbl_sys_score_test {
+  sys_score_id     Int       @id @default(autoincrement())
+  site_id          Int?
+  module_id        String?   @db.VarChar(100)
+  param_id         String?   @db.VarChar(100)
+  module_score     String?   @db.VarChar(100)
+  param_score      String?   @db.VarChar(100)
+  sys_score_date   DateTime? @db.DateTime(0)
+  sys_score_status Boolean?  @default(true)
+}
+
+model tbl_system_score {
+  id             Int       @id @default(autoincrement())
+  site_id        Int?
+  uploadid       String?   @db.VarChar(200)
+  module_id      String?   @db.VarChar(200)
+  param_id       String?   @db.VarChar(200)
+  module_score   Decimal?  @db.Decimal(10, 2)
+  param_score    Decimal?  @db.Decimal(10, 2)
+  sys_score_date DateTime? @db.DateTime(0)
+
+  @@index([sys_score_date(sort: Desc), site_id], map: "idx_system_score_date_site")
+  @@index([site_id, sys_score_date], map: "idx_system_score_site_date")
+}
+
+model tbl_system_score_temp {
+  id             BigInt    @id @default(autoincrement())
+  site_id        Int
+  uploadid       String    @db.VarChar(255)
+  module_id      String?   @db.VarChar(255)
+  param_id       String?   @db.VarChar(255)
+  module_score   Decimal?  @db.Decimal(10, 2)
+  param_score    Decimal?  @db.Decimal(10, 2)
+  sys_score_date DateTime  @db.DateTime(0)
+  created_at     DateTime? @default(now()) @db.DateTime(0)
+
+  @@index([sys_score_date], map: "idx_date")
+  @@index([site_id, uploadid], map: "idx_upload")
+}
+
+model tbl_topic {
+  topic_id     Int       @id @default(autoincrement())
+  site_id      Int?
+  topic_name   String?   @db.VarChar(255)
+  is_system    Boolean?
+  status       Boolean?
+  created_date DateTime? @db.DateTime(0)
+  updated_on   DateTime? @db.DateTime(0)
+}
+
+model tbl_topic_site {
+  topic_id     Int       @id @default(autoincrement())
+  site_id      Int?
+  topic_name   String?   @db.VarChar(255)
+  is_system    Boolean?
+  status       Boolean?
+  created_date DateTime? @db.DateTime(0)
+  updated_on   DateTime? @db.DateTime(0)
+}
+
+model tbl_upload_alert {
+  upload_alert_id   Int       @id @default(autoincrement())
+  uploadid          String    @unique(map: "uploadid") @db.VarChar(255)
+  site_id           Int
+  status            Boolean
+  homeupdStatus     Int?      @default(0) @db.TinyInt
+  siteupdStatus     Int?      @default(0) @db.TinyInt
+  dailyCtrStatus    Boolean
+  opexCtrStatus     Int?      @default(1) @db.TinyInt
+  dailyHMIStatus    Int?      @default(1) @db.TinyInt
+  dailyMongoStatus  Int?      @default(0) @db.TinyInt
+  mongoUploadStatus Boolean?  @default(true)
+  addData           DateTime? @db.DateTime(0)
+}
+
+model tbl_upload_alert_test {
+  upload_alert_id   Int       @id @default(autoincrement())
+  uploadid          String?   @db.VarChar(255)
+  site_id           Int?
+  status            Boolean?
+  homeupdStatus     Int?      @db.TinyInt
+  siteupdStatus     Int?      @db.TinyInt
+  dailyCtrStatus    Boolean?
+  opexCtrStatus     Int?      @db.TinyInt
+  dailyHMIStatus    Int?      @db.TinyInt
+  dailyMongoStatus  Int?      @db.TinyInt
+  mongoUploadStatus Boolean?
+  addData           DateTime? @db.DateTime(0)
+}
+
+model tbl_upload_data {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime  @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean   @default(true)
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+
+  @@index([code], map: "data_code_id")
+  @@index([site_id, date, code], map: "data_mix")
+  @@index([site_id], map: "data_site_id")
+  @@index([site_id, date, code, status], map: "idx_complex_upload_query")
+  @@index([site_id, date, code, status], map: "idx_siteid_date_code_status")
+  @@index([adddate], map: "idx_tbl_upload_data_adddate")
+  @@index([date], map: "idx_tbl_upload_data_date")
+  @@index([code, site_id, status], map: "idx_upload_data_code")
+  @@index([site_id, date, status], map: "idx_upload_data_site_date")
+  @@index([site_id, status, date], map: "idx_upload_data_site_status")
+}
+
+model tbl_upload_delta {
+  upload_delta_id Int       @id @default(autoincrement())
+  uploadid        String    @db.VarChar(255)
+  code            String?   @db.VarChar(255)
+  value           String?   @db.VarChar(255)
+  actual_value    String?   @db.VarChar(255)
+  site_id         Int
+  status          Boolean
+  date            DateTime? @db.DateTime(0)
+  grpdate         DateTime? @db.Date
+  uploaddate      DateTime  @db.DateTime(0)
+
+  @@unique([code, date], map: "unique_index")
+  @@index([site_id, date, code, status], map: "idx_siteid_date_code_status_delta")
+  @@index([code, site_id, status], map: "idx_upload_delta_code")
+  @@index([site_id, date, status], map: "idx_upload_delta_site_date")
+  @@index([site_id, status, date], map: "idx_upload_delta_site_status")
+}
+
+model tbl_upload_id {
+  upload_alert_id   Int       @id @default(autoincrement())
+  uploadid          String?   @db.VarChar(255)
+  site_id           Int?
+  status            Boolean?
+  homeupdStatus     Int?      @db.TinyInt
+  siteupdStatus     Int?      @db.TinyInt
+  dailyCtrStatus    Boolean?
+  opexCtrStatus     Int?      @db.TinyInt
+  dailyHMIStatus    Int?      @db.TinyInt
+  dailyMongoStatus  Int?      @db.TinyInt
+  mongoUploadStatus Boolean?
+  addData           DateTime? @db.DateTime(0)
+}
+
+model tbl_upload_opex_alert {
+  upload_alert_id Int       @id @default(autoincrement())
+  uploadid        String    @db.VarChar(255)
+  site_id         Int
+  status          Boolean
+  dailyCtrStatus  Boolean
+  priceCtrStatus  Boolean   @default(false)
+  addData         DateTime? @db.DateTime(0)
+
+  @@unique([uploadid, site_id, status, dailyCtrStatus], map: "uploadid")
+}
+
+model tbl_upload_opex_delta {
+  upload_delta_id Int       @id @default(autoincrement())
+  uploadid        String    @db.VarChar(255)
+  code            String?   @db.VarChar(255)
+  value           String?   @db.VarChar(255)
+  actual_value    String?   @db.VarChar(255)
+  site_id         Int
+  status          Boolean
+  date            DateTime? @db.DateTime(0)
+  uploaddate      DateTime  @db.DateTime(0)
+
+  @@index([site_id, date, code, status], map: "idx_siteid_date_code_status_opexdelta")
+}
+
+model tbl_upload_process_data_1 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime  @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean   @default(true)
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+
+  @@index([code], map: "data_code_id")
+  @@index([site_id, date, code], map: "data_mix")
+  @@index([site_id], map: "data_site_id")
+  @@index([adddate], map: "idx_tbl_upload_data_adddate")
+  @@index([date], map: "idx_tbl_upload_data_date")
+}
+
+model tbl_upload_process_data_2 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime  @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean   @default(true)
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+}
+
+model tbl_upload_process_data_3 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime  @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean   @default(true)
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+
+  @@index([site_id, code, value, date], map: "index_name")
+}
+
+model tbl_user {
+  user_id          Int       @id @unique(map: "user_id_UNIQUE") @default(autoincrement())
+  user_role        Int?      @default(0)
+  username         String?   @db.VarChar(255)
+  email            String?   @db.VarChar(255)
+  phone            String?   @db.VarChar(255)
+  password         String?   @db.VarChar(255)
+  hash_password    String?   @db.VarChar(255)
+  first_name       String?   @db.VarChar(100)
+  last_name        String?   @db.VarChar(100)
+  lab_type         Int?      @default(0) @db.TinyInt
+  lab_id           String?   @default("0") @db.VarChar(100)
+  dob              DateTime? @db.Date
+  created_by       Int?
+  created_date     DateTime? @db.DateTime(0)
+  ip_address       String?   @db.VarChar(100)
+  provider         String?   @db.VarChar(100)
+  islogin          Boolean?  @default(false)
+  cntLoginAttempt  Int?      @default(0)
+  lastLoginAttempt DateTime? @db.DateTime(0)
+  status           Boolean?  @default(false)
+}
+
+model tbl_user_management {
+  id            Int      @id @default(autoincrement())
+  admin_user_id Int
+  user_id       Int
+  role_id       Int
+  site_id       Int
+  executive_id  String?  @db.VarChar(255)
+  site_name     String?  @db.VarChar(255)
+  status        Int?     @default(1) @db.TinyInt
+  created_at    DateTime @default(now()) @db.Timestamp(0)
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model tbl_users {
+  user_id          Int       @id @default(autoincrement())
+  aws_user_id      Int?      @default(0)
+  user_role        Int?      @db.UnsignedInt
+  username         String    @db.VarChar(300)
+  email            String    @db.VarChar(300)
+  password         String    @db.VarChar(300)
+  hash_password    String?   @db.VarChar(255)
+  first_name       String    @db.VarChar(100)
+  last_name        String    @db.VarChar(100)
+  lab_type         Int       @default(0) @db.TinyInt
+  lab_id           String?   @db.VarChar(100)
+  dob              DateTime  @db.Date
+  created_by       Int?      @db.UnsignedInt
+  created_date     DateTime? @db.DateTime(0)
+  ip_address       String?   @db.VarChar(100)
+  provider         String?   @db.VarChar(100)
+  islogin          Boolean?  @default(false)
+  cntLoginAttempt  Int       @default(0)
+  lastLoginAttempt DateTime? @db.DateTime(0)
+  session_token    String?   @db.VarChar(255)
+  status           Boolean?  @default(true)
+
+  @@index([user_role], map: "idx_users_role")
+  @@index([status], map: "idx_users_status")
 }

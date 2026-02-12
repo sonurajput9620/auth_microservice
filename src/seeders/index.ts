@@ -1,15 +1,7 @@
 import { prisma } from "../prismaClient";
 
 const seed = async (): Promise<void> => {
-  await prisma.user.upsert({
-    where: { email: "admin@example.com" },
-    update: {},
-    create: {
-      email: "admin@example.com",
-      password: "change_me",
-      role: "ADMIN"
-    }
-  });
+  
 };
 
 seed()
