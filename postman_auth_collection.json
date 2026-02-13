@@ -1,0 +1,133 @@
+{
+  "info": {
+    "name": "Auth Microservice - Cognito Flow",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Custom backend APIs for Cognito signup, confirmation, admin approval, login MFA, and forgot password."
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:4100" },
+    { "key": "apiVersion", "value": "v1" },
+    { "key": "username", "value": "jdoe01" },
+    { "key": "password", "value": "StrongPass#123" },
+    { "key": "newPassword", "value": "NewStrongPass#123" },
+    { "key": "confirmationCode", "value": "123456" },
+    { "key": "challengeCode", "value": "654321" },
+    { "key": "registrationId", "value": "12" },
+    { "key": "session", "value": "<cognito-session-token>" },
+    { "key": "challengeName", "value": "EMAIL_OTP" }
+  ],
+  "item": [
+    {
+      "name": "1. Sign Up",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{username}}\",\n  \"first_name\": \"John\",\n  \"last_name\": \"Doe\",\n  \"email\": \"john@example.com\",\n  \"phone\": \"+919999999999\",\n  \"password\": \"{{password}}\"\n}"
+        },
+        "url": "{{baseUrl}}/api/{{apiVersion}}/auth/signup"
+      }
+    },
+    {
+      "name": "2. Confirm Sign Up",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{username}}\",\n  \"confirmation_code\": \"{{confirmationCode}}\"\n}"
+        },
+        "url": "{{baseUrl}}/api/{{apiVersion}}/auth/signup/confirm"
+      }
+    },
+    {
+      "name": "3. Review Registration - APPROVE",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"action\": \"APPROVE\",\n  \"role_id\": 2,\n  \"site_id\": 10,\n  \"corporation_id\": 1001,\n  \"approved_by\": 1,\n  \"review_note\": \"Approved by admin\"\n}"
+        },
+        "url": "{{baseUrl}}/api/{{apiVersion}}/auth/registrations/{{registrationId}}/review"
+      }
+    },
+    {
+      "name": "4. Review Registration - REJECT",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"action\": \"REJECT\",\n  \"approved_by\": 1,\n  \"review_note\": \"Missing required business details\"\n}"
+        },
+        "url": "{{baseUrl}}/api/{{apiVersion}}/auth/registrations/{{registrationId}}/review"
+      }
+    },
+    {
+      "name": "5. Login Initiate",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
+        },
+        "url": "{{baseUrl}}/api/{{apiVersion}}/auth/login/initiate"
+      }
+    },
+    {
+      "name": "6. Login Respond (MFA)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{username}}\",\n  \"session\": \"{{session}}\",\n  \"challenge_name\": \"{{challengeName}}\",\n  \"challenge_code\": \"{{challengeCode}}\"\n}"
+        },
+        "url": "{{baseUrl}}/api/{{apiVersion}}/auth/login/respond"
+      }
+    },
+    {
+      "name": "7. Forgot Password",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{username}}\"\n}"
+        },
+        "url": "{{baseUrl}}/api/{{apiVersion}}/auth/forgot-password"
+      }
+    },
+    {
+      "name": "8. Confirm Forgot Password",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{username}}\",\n  \"confirmation_code\": \"{{confirmationCode}}\",\n  \"new_password\": \"{{newPassword}}\"\n}"
+        },
+        "url": "{{baseUrl}}/api/{{apiVersion}}/auth/forgot-password/confirm"
+      }
+    }
+  ]
+}

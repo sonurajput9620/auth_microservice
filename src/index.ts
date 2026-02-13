@@ -3,7 +3,10 @@ import dotenv from "dotenv";
 import express, { Application } from "express";
 
 import { GlobalErrorHandler } from "./middlewares/GlobalErrorHandler";
+import { RequestResponseLoggingMiddleware } from "./middlewares/RequestResponseLoggingMiddleware";
 import { connectDB, disconnectDB } from "./prismaClient";
+import { Logger } from "./utils/Logger";
+import { ApiResponse } from "./utils/ApiResponse";
 import v1Router from "./routes/v1";
 
 dotenv.config();
@@ -14,11 +17,12 @@ const port: number = Number(process.env.PORT) || 4100;
 app.use(cors());
 app.use(express.json());
 
+// Request/Response logging middleware
+app.use(RequestResponseLoggingMiddleware);
+
 app.get("/health", (_req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "Auth microservice is healthy."
-  });
+  Logger.info("Health check called");
+  ApiResponse.ok(res, "Auth microservice is healthy.", { status: "operational" });
 });
 
 app.use("/api/v1", v1Router);
@@ -27,19 +31,17 @@ app.use(GlobalErrorHandler);
 const bootstrap = async (): Promise<void> => {
   try {
     await connectDB();
-    // eslint-disable-next-line no-console
-    console.log("Database connected successfully.");
+    Logger.info("Database connected successfully.");
 
     const server = app.listen(port, () => {
-      // eslint-disable-next-line no-console
-      console.log(`Server is running on port ${port}`);
+      Logger.info(`Server is running on port ${port}`, { port });
     });
 
     const shutdown = async (signal: string): Promise<void> => {
-      // eslint-disable-next-line no-console
-      console.log(`${signal} received. Shutting down gracefully...`);
+      Logger.info(`${signal} received. Shutting down gracefully...`, { signal });
       server.close(async () => {
         await disconnectDB();
+        Logger.info("Database disconnected. Server shut down.");
         process.exit(0);
       });
     };
@@ -52,8 +54,8 @@ const bootstrap = async (): Promise<void> => {
       void shutdown("SIGTERM");
     });
   } catch (err: unknown) {
-    // eslint-disable-next-line no-console
-    console.error("Failed to connect database.", err);
+    const error = err instanceof Error ? err : new Error(String(err));
+    Logger.error("Failed to connect database.", error);
     process.exit(1);
   }
 };
