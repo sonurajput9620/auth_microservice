@@ -1,0 +1,189 @@
+AUTH MICROSERVICE DOCUMENTATION (PLAIN TEXT)
+Generated on: 2026-02-13
+
+1) PROJECT OVERVIEW
+- Project type: Node.js + TypeScript + Express + Prisma + MySQL
+- Purpose: Backend auth microservice integrating AWS Cognito through custom APIs.
+- API base path: /api/v1
+- Health endpoint: GET /health
+
+2) WHAT HAS BEEN IMPLEMENTED
+The following Cognito-backed flows have been added:
+- User sign up
+- Email verification (confirm sign up)
+- Registration approval/rejection workflow
+- Approved-user provisioning into internal user table
+- Login (username + password)
+- MFA challenge response
+- Forgot password
+- Confirm forgot password
+
+All flows are exposed via backend APIs so frontend interacts only with this project.
+
+3) NEW AUTH API ENDPOINTS
+Base: /api/v1/auth
+
+- POST /signup
+  Input: username, first_name, last_name, email, phone, password
+  Action: Creates user in Cognito, sends verification code.
+
+- POST /signup/confirm
+  Input: username, confirmation_code
+  Action: Confirms user in Cognito, reads Cognito attributes, creates/updates register_user with PENDING_APPROVAL.
+
+- POST /registrations/:id/review
+  Input: action (APPROVE/REJECT), review_note, approved_by
+  For APPROVE also requires: role_id, site_id, corporation_id
+  Action:
+  - REJECT -> mark register_user as REJECTED
+  - APPROVE -> mark register_user as APPROVED and create app_user record
+
+- POST /login/initiate
+  Input: username, password
+  Action:
+  - Validates user exists in app_user and is ACTIVE
+  - Calls Cognito USER_PASSWORD_AUTH
+  - Returns either tokens (if no challenge) or challenge_name + session (if MFA required)
+
+- POST /login/respond
+  Input: username, session, challenge_name, challenge_code
+  Action: Responds to Cognito challenge and returns auth tokens.
+  Supported challenges in code:
+  - SMS_MFA
+  - SOFTWARE_TOKEN_MFA
+  - EMAIL_OTP
+
+- POST /forgot-password
+  Input: username
+  Action: Triggers Cognito forgot-password code delivery.
+
+- POST /forgot-password/confirm
+  Input: username, confirmation_code, new_password
+  Action: Confirms password reset in Cognito.
+
+4) NEW FILES ADDED
+- src/routes/v1/AuthRoutes.ts
+- src/controllers/AuthController.ts
+- src/services/AuthService.ts
+- src/validations/AuthValidation.ts
+- README.md
+- postman_auth_collection.json
+
+5) FILES UPDATED
+- src/routes/v1/index.ts
+  Added auth routes: router.use("/auth", authRoutes)
+
+- prisma/schema.prisma
+  Added models:
+  - register_user
+  - app_user
+  Added enums:
+  - RegistrationStatus (PENDING_APPROVAL, APPROVED, REJECTED)
+  - AppUserStatus (ACTIVE, INACTIVE)
+
+- .env.example
+  Added Cognito/AWS keys placeholders:
+  - AWS_DEFAULT_REGION
+  - COGNITO_CLIENT_ID
+  - COGNITO_USER_POOL_ID
+
+- package.json / package-lock.json
+  Added dependency:
+  - @aws-sdk/client-cognito-identity-provider
+
+6) DATABASE DESIGN ADDED
+A) register_user
+Purpose: Store users after Cognito email verification but before admin approval.
+Main fields:
+- id
+- cognito_sub
+- username
+- first_name
+- last_name
+- email
+- phone
+- status (PENDING_APPROVAL/APPROVED/REJECTED)
+- reviewed_by
+- reviewed_at
+- review_note
+- email_verified
+- created_at
+- updated_at
+
+B) app_user
+Purpose: Store approved users ready to use application.
+Main fields:
+- id
+- register_user_id (unique relation to register_user)
+- cognito_sub
+- username
+- first_name
+- last_name
+- email
+- phone
+- role_id
+- site_id
+- corporation_id
+- status (ACTIVE/INACTIVE)
+- created_at
+- updated_at
+
+7) VALIDATION RULES ADDED (Zod)
+- Signup:
+  username min 3, first_name required, last_name required, valid email, phone min 8, password min 8
+- Confirm signup:
+  username + confirmation_code
+- Review registration:
+  action APPROVE/REJECT
+  if APPROVE -> role_id/site_id/corporation_id are mandatory
+- Login initiate:
+  username + password
+- Login respond:
+  username + session + challenge_name + challenge_code
+- Forgot password:
+  username
+- Confirm forgot password:
+  username + confirmation_code + new_password
+
+8) COGNITO INTEGRATION DETAILS
+Service used: @aws-sdk/client-cognito-identity-provider
+Commands used:
+- SignUpCommand
+- ConfirmSignUpCommand
+- AdminGetUserCommand
+- InitiateAuthCommand
+- RespondToAuthChallengeCommand
+- ForgotPasswordCommand
+- ConfirmForgotPasswordCommand
+
+Environment variables required by service:
+- AWS_DEFAULT_REGION
+- COGNITO_CLIENT_ID
+- COGNITO_USER_POOL_ID
+
+9) DOCUMENTATION AND TEST ARTIFACTS ADDED
+- README.md includes endpoint-wise request/response examples and curl commands.
+- postman_auth_collection.json includes all auth APIs with reusable variables.
+
+10) CURRENT KNOWN ISSUES / PENDING ITEMS
+- Prisma client generation currently failing on local machine due to Windows file lock (EPERM unlink under node_modules/.prisma/client).
+- TypeScript build has an existing project config issue in tsconfig.json:
+  ignoreDeprecations = "6.0" is invalid for current compiler settings.
+- src/services/UserService.ts is currently empty and may trigger separate compile/module errors unrelated to new auth features.
+- Because Prisma generate has not completed, Prisma TS types for new models may not be available until regenerate succeeds.
+
+11) REQUIRED NEXT EXECUTION STEPS
+1. Ensure no process is locking Prisma client files (stop dev server/watchers).
+2. Run: npm run prisma:generate
+3. Run migration: npm run prisma:migrate -- --name cognito-auth-flow
+4. Fix tsconfig ignoreDeprecations value (or remove it), then run: npm run build
+5. Verify Cognito app client allows USER_PASSWORD_AUTH and your intended MFA mode.
+
+12) ENV SNAPSHOT (AS USED)
+From current .env setup, these values are already present:
+- COGNITO_USER_POOL_ID=ap-south-1_IpHuY1R4r
+- COGNITO_CLIENT_ID=4gan91cej5fd3carar5ispnoit
+
+Keep AWS credentials secure and avoid committing secrets.
+
+END OF DOCUMENT

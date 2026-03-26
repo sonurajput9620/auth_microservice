@@ -86,31 +86,35 @@ model alert_types {
 }
 
 model alerts {
-  alertid          BigInt    @id @default(autoincrement())
-  alertname        String?   @db.VarChar(200)
-  alerttype        BigInt?
-  alertdescription String?   @db.VarChar(1000)
-  alertinstruction String?   @db.VarChar(1000)
-  alertconditions  String?   @db.VarChar(100)
-  alertscore       String?   @db.VarChar(100)
-  alertassigned    BigInt?
-  alertpriority    Int?      @db.TinyInt
-  priorityinterval String?   @db.VarChar(100)
-  alertmodule      String?   @db.VarChar(200)
-  alertparameter   String?   @db.VarChar(200)
-  alertequipment   String?   @db.VarChar(300)
-  createddate      DateTime? @db.DateTime(0)
-  updatedate       DateTime? @db.DateTime(0)
-  instructionfile  String?   @db.VarChar(1000)
-  alertinterval    String?   @db.VarChar(100)
-  startdate        DateTime? @db.DateTime(0)
-  alertstatus      BigInt?
-  siteid           BigInt?
-  alertdelayed     Int?      @db.TinyInt
-  delayedinterval  String?   @db.VarChar(100)
-  status           Int?
-  isclear          Int?
-  triggerdatetime  DateTime? @db.DateTime(0)
+  alertid              BigInt    @id @default(autoincrement())
+  alertname            String?   @db.VarChar(200)
+  alerttype            BigInt?
+  alertdescription     String?   @db.VarChar(1000)
+  alertinstruction     String?   @db.VarChar(1000)
+  alertconditions      String?   @db.VarChar(100)
+  alertscore           String?   @db.VarChar(100)
+  alertassigned        BigInt?
+  alertpriority        Int?      @db.TinyInt
+  priorityinterval     String?   @db.VarChar(100)
+  alertmodule          String?   @db.VarChar(200)
+  alertparameter       String?   @db.VarChar(200)
+  alertequipment       String?   @db.VarChar(300)
+  createddate          DateTime? @db.DateTime(0)
+  updatedate           DateTime? @db.DateTime(0)
+  instructionfile      String?   @db.VarChar(1000)
+  alertinterval        String?   @db.VarChar(100)
+  startdate            DateTime? @db.DateTime(0)
+  alertstatus          BigInt?
+  siteid               BigInt?
+  alertdelayed         Int?      @db.TinyInt
+  delayedinterval      String?   @db.VarChar(100)
+  status               Int?
+  isclear              Int?
+  triggerdatetime      DateTime? @db.DateTime(0)
+  supportiveparameters Json?
+  aiassistantjson      Json?
+  trend                Json?
+  aigroup              String?   @db.VarChar(255)
 
   @@index([siteid, status], map: "idx_alerts_siteid_status")
 }
@@ -293,6 +297,8 @@ model dashboard {
   updated_by         Int?
   last_email_sent_at DateTime?
   metadata           Json?
+  attached_user      Json?
+  report_target_role String?         @db.VarChar(45)
   dashboard_group    dashboard_group @relation(fields: [dashboard_group_id], references: [id])
   report             report[]
 
@@ -312,7 +318,6 @@ model dashboard_group {
   metadata          Json?
   show_on_dashboard Boolean     @default(false)
   dashboard         dashboard[]
-  link              link[]
 }
 
 model django_content_type {
@@ -341,38 +346,35 @@ model execution_locks {
 
 model jobs_history {
   id                   Int       @id @default(autoincrement())
-  run_id               String    @unique
-  tenant_id            String?
-  report_id            Int
-  site_id              String?
+  run_id               String?
+  tenant_id            Int?
+  report_id            Int?
+  site_id              Int?
   dashboard_id         Int?
   widget_id            String?
-  status               String
+  status               String?
   error                Json?
   processed_rows_count Int?
-  retry_count          Int       @default(0)
-  started_at           DateTime  @default(now())
+  retry_count          Int?
+  started_at           DateTime?
   finished_at          DateTime?
-  created_at           DateTime  @default(now())
-  updated_at           DateTime
+  created_at           DateTime?
+  updated_at           DateTime?
   payload              Json?
   stage                String?
   triggered_by         Int?
 }
 
 model link {
-  id                 Int             @id @default(autoincrement())
+  id                 Int       @id @default(autoincrement())
   link_name          String?
-  report_ids         String?         @db.Text
+  report_ids         String?   @db.Text
   order              Int?
-  dashboard_group_id Int
+  dashboard_group_id Int?
   layout_config      Json?
   created_at         DateTime?
+  dashboard_id       String?
   updated_at         DateTime?
-  dashboards         String          @db.Text
-  dashboard_group    dashboard_group @relation(fields: [dashboard_group_id], references: [id])
-
-  @@index([dashboard_group_id], map: "link_dashboard_group_id_fkey")
 }
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
@@ -554,17 +556,6 @@ model report_permission {
   @@index([role_id], map: "idx_permission_role")
 }
 
-model tbl_Subcategory_equipment_product {
-  eqprod_id   Int     @id @default(autoincrement())
-  eqcat_id    Int
-  category_id Int
-  type        String? @db.VarChar(255)
-  tag_id      String? @db.VarChar(255)
-  description String? @db.VarChar(255)
-  tag_text    String? @db.Text
-  prod_status Boolean @default(true)
-}
-
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model tbl_alert_archive {
   archive_id       Int       @id @default(autoincrement())
@@ -618,18 +609,19 @@ model tbl_alerts {
 
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 model tbl_category {
-  category_id             Int                       @id @default(autoincrement()) @db.UnsignedInt
-  category_name           String?                   @db.VarChar(255)
-  category_description    String?                   @db.Text
-  channel_count           Int
-  position_count          Int
-  sitepfd                 String?                   @db.VarChar(255)
-  created_by              Int?
-  created_datetime        DateTime?                 @db.DateTime(0)
-  operation_ip_address    String?                   @db.VarChar(100)
-  module_status           Boolean?                  @default(true)
-  category_master_id      Int?
-  category_alerts_actions category_alerts_actions[]
+  category_id               Int                       @id @default(autoincrement()) @db.UnsignedInt
+  category_name             String?                   @db.VarChar(255)
+  category_description      String?                   @db.Text
+  channel_count             Int
+  position_count            Int
+  sitepfd                   String?                   @db.VarChar(255)
+  created_by                Int?
+  created_datetime          DateTime?                 @db.DateTime(0)
+  operation_ip_address      String?                   @db.VarChar(100)
+  module_status             Boolean?                  @default(true)
+  category_master_id        Int?
+  dashboard_sub_category_id Json?
+  category_alerts_actions   category_alerts_actions[]
 
   @@index([module_status], map: "idx_category_module_status")
 }
@@ -2254,7 +2246,7 @@ model tbl_site_module_parameter {
   position                     String   @db.VarChar(50)
   site_module_id               Int?
   site_module_code             String?  @db.VarChar(40)
-  parameter_name               String?  @db.VarChar(50)
+  parameter_name               String?  @db.VarChar(150)
   parameter_id                 Int
   parameter_mix_id             String   @db.VarChar(255)
   parameter_type               Boolean?
@@ -2270,6 +2262,7 @@ model tbl_site_module_parameter {
   parameter_query              String?  @db.Text
   upload_source                Boolean? @default(false)
   adddate                      DateTime @default(now()) @db.DateTime(0)
+  data_calculation             String?  @db.VarChar(45)
   site_module_parameter_status Boolean? @default(true)
 
   @@index([site_id, parameter_type, site_module_parameter_status, parameter_code], map: "idx_param_main")
@@ -2420,33 +2413,35 @@ model tbl_site_processmodule_parameter_report {
   position                   String? @db.VarChar(50)
   benchmark                  String? @db.VarChar(50)
   status                     Int
+  report_calculation_type    String? @db.VarChar(20)
 
   @@index([site_id], map: "site_id_index")
 }
 
 model tbl_site_processmodule_report {
-  report_id        Int       @id @default(autoincrement())
-  site_id          Int?
-  site_module_code String?   @db.VarChar(40)
-  report_type      Int?
-  report_name      String?   @db.VarChar(100)
-  graph_type       Int?
-  channel          Int?
-  position         String?   @db.VarChar(50)
-  stat_functions   String?   @db.Text
-  rolling_status   Boolean?
-  rolling_count    Int?
-  lab_id           String?   @db.VarChar(100)
-  is_calender      Int?      @default(0)
-  start_date       DateTime? @db.Date
-  end_date         DateTime? @db.Date
-  last_limit       Int?      @default(0)
-  last_type        Int?      @default(0)
-  frequency_type   Int?      @default(0)
-  created_by       Int?
-  created_date     DateTime? @db.DateTime(0)
-  ip_address       String?   @db.VarChar(100)
-  report_status    Boolean?  @default(true)
+  report_id               Int       @id @default(autoincrement())
+  site_id                 Int?
+  site_module_code        String?   @db.VarChar(40)
+  report_type             Int?
+  report_name             String?   @db.VarChar(100)
+  graph_type              Int?
+  channel                 Int?
+  position                String?   @db.VarChar(50)
+  stat_functions          String?   @db.Text
+  rolling_status          Boolean?
+  rolling_count           Int?
+  lab_id                  String?   @db.VarChar(100)
+  is_calender             Int?      @default(0)
+  start_date              DateTime? @db.Date
+  end_date                DateTime? @db.Date
+  last_limit              Int?      @default(0)
+  last_type               Int?      @default(0)
+  frequency_type          Int?      @default(0)
+  created_by              Int?
+  created_date            DateTime? @db.DateTime(0)
+  ip_address              String?   @db.VarChar(100)
+  report_status           Boolean?  @default(true)
+  report_calculation_type String?   @db.VarChar(20)
 
   @@index([site_id, report_status], map: "idx_process_report_site_status")
 }
@@ -2855,46 +2850,404 @@ model tbl_users {
 }
 
 model register_user {
-  id             Int                @id @default(autoincrement())
-  cognito_sub    String?            @unique(map: "uniq_register_user_cognito_sub") @db.VarChar(255)
-  username       String             @unique(map: "uniq_register_user_username") @db.VarChar(120)
-  first_name     String?            @db.VarChar(120)
-  last_name      String?            @db.VarChar(120)
-  email          String?            @unique(map: "uniq_register_user_email") @db.VarChar(255)
-  phone          String?            @db.VarChar(30)
-  status         RegistrationStatus @default(PENDING_APPROVAL)
-  reviewed_by    Int?
-  reviewed_at    DateTime?          @db.DateTime(0)
-  review_note    String?            @db.VarChar(500)
-  email_verified Boolean            @default(false)
-  phone_verified Boolean            @default(false)
-  created_at     DateTime           @default(now()) @db.DateTime(0)
-  updated_at     DateTime           @updatedAt @db.DateTime(0)
-  app_user       app_user?
+  id                                 Int                @id @default(autoincrement())
+  cognito_sub                        String?            @unique(map: "uniq_register_user_cognito_sub") @db.VarChar(255)
+  username                           String             @unique(map: "uniq_register_user_username") @db.VarChar(120)
+  first_name                         String?            @db.VarChar(120)
+  last_name                          String?            @db.VarChar(120)
+  email                              String?            @unique(map: "uniq_register_user_email") @db.VarChar(255)
+  phone                              String?            @db.VarChar(30)
+  status                             RegistrationStatus @default(PENDING_APPROVAL)
+  reviewed_by                        Int?
+  reviewed_at                        DateTime?          @db.DateTime(0)
+  review_note                        String?            @db.VarChar(500)
+  email_verified                     Boolean            @default(false)
+  created_at                         DateTime           @default(now()) @db.DateTime(0)
+  updated_at                         DateTime           @updatedAt @db.DateTime(0)
+  phone_verified                     Boolean            @default(false)
+  phone_verification_code            String?            @db.VarChar(10)
+  phone_verification_code_expires_at DateTime?          @db.DateTime(0)
+  app_user                           app_user?
 
   @@index([status], map: "idx_register_user_status")
 }
 
 model app_user {
-  id              Int           @id @default(autoincrement())
-  register_user_id Int          @unique(map: "uniq_app_user_register_user")
-  cognito_sub     String?       @unique(map: "uniq_app_user_cognito_sub") @db.VarChar(255)
-  username        String        @unique(map: "uniq_app_user_username") @db.VarChar(120)
-  first_name      String?       @db.VarChar(120)
-  last_name       String?       @db.VarChar(120)
-  email           String?       @db.VarChar(255)
-  phone           String?       @db.VarChar(30)
-  role_id         Int?
-  site_id         Int?
-  corporation_id  Int?
-  status          Boolean       @default(true)
-  created_at      DateTime      @default(now()) @db.DateTime(0)
-  updated_at      DateTime      @updatedAt @db.DateTime(0)
-  register_user   register_user @relation(fields: [register_user_id], references: [id], onDelete: Restrict)
+  id               Int           @id @default(autoincrement())
+  register_user_id Int           @unique(map: "uniq_app_user_register_user")
+  cognito_sub      String?       @unique(map: "uniq_app_user_cognito_sub") @db.VarChar(255)
+  username         String        @unique(map: "uniq_app_user_username") @db.VarChar(120)
+  first_name       String?       @db.VarChar(120)
+  last_name        String?       @db.VarChar(120)
+  email            String?       @db.VarChar(255)
+  phone            String?       @db.VarChar(30)
+  role_id          Int?
+  site_id          Int?
+  corporation_id   Int?
+  status           Boolean       @default(true)
+  created_at       DateTime      @default(now()) @db.DateTime(0)
+  updated_at       DateTime      @updatedAt @db.DateTime(0)
+  register_user    register_user @relation(fields: [register_user_id], references: [id])
 
   @@index([site_id], map: "idx_app_user_site_id")
   @@index([corporation_id], map: "idx_app_user_corporation_id")
   @@index([status], map: "idx_app_user_status")
+}
+
+model ai_alert_history {
+  id              BigInt    @id @default(autoincrement())
+  alertid         BigInt?
+  alerttype       BigInt?
+  siteid          BigInt?
+  triggerdatetime DateTime? @db.DateTime(0)
+  status          Int?
+  created_at      DateTime? @default(now()) @db.Timestamp(0)
+}
+
+model alert_groups {
+  global_group_id Int       @id @default(autoincrement())
+  label           String?   @db.VarChar(255)
+  dateandtime     DateTime? @db.DateTime(0)
+  status          String?   @db.VarChar(50)
+}
+
+model alert_site_groups {
+  id              Int       @id @default(autoincrement())
+  siteid          Int
+  global_group_id Int
+  selected        Int?      @default(1) @db.TinyInt
+  dateandtime     DateTime? @default(now()) @db.DateTime(0)
+  status          String?   @default("active") @db.VarChar(50)
+}
+
+/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
+model anomalies_resolved {
+  siteId  BigInt
+  alertId String @db.VarChar(255)
+  status  String @db.VarChar(100)
+
+  @@ignore
+}
+
+model fcm_push_tokens {
+  id                 BigInt   @id @default(autoincrement())
+  user_id            String   @db.VarChar(64)
+  token              String   @unique(map: "uq_fcm_push_tokens_token") @db.VarChar(512)
+  site_id            Int
+  platform           String   @db.VarChar(32)
+  is_active          Boolean  @default(true)
+  deactivated_reason String?  @db.VarChar(128)
+  created_at         DateTime @default(now()) @db.DateTime(0)
+  updated_at         DateTime @default(now()) @db.DateTime(0)
+
+  @@index([user_id, is_active], map: "idx_fcm_push_tokens_user_active")
+  @@index([user_id, site_id, is_active], map: "idx_fcm_push_tokens_user_site_active")
+}
+
+model openai_analysis_logs {
+  id                   BigInt               @id @default(autoincrement())
+  analysis_run_id      BigInt
+  event_type           String               @db.VarChar(100)
+  event_status         String               @db.VarChar(50)
+  message              String?              @db.Text
+  metadata             Json?
+  created_at           DateTime             @default(now()) @db.DateTime(0)
+  openai_analysis_runs openai_analysis_runs @relation(fields: [analysis_run_id], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "fk_openai_analysis_logs_run")
+
+  @@index([analysis_run_id], map: "idx_openai_analysis_logs_analysis_run_id")
+  @@index([event_type], map: "idx_openai_analysis_logs_event_type")
+}
+
+model openai_analysis_runs {
+  id                   BigInt                 @id @default(autoincrement())
+  source_type          String                 @db.VarChar(100)
+  source_alert_id      BigInt?
+  source_site_id       BigInt?
+  source_status        Int?
+  assistant_id         String                 @db.VarChar(255)
+  thread_id            String?                @db.VarChar(255)
+  run_id               String?                @db.VarChar(255)
+  request_payload      Json?
+  instructions         String?                @db.Text
+  response_payload     Json?
+  response_text        String?                @db.LongText
+  run_status           String                 @default("created") @db.VarChar(50)
+  error_message        String?                @db.Text
+  started_at           DateTime               @default(now()) @db.DateTime(0)
+  completed_at         DateTime?              @db.DateTime(0)
+  created_at           DateTime               @default(now()) @db.DateTime(0)
+  updated_at           DateTime               @default(now()) @db.DateTime(0)
+  openai_analysis_logs openai_analysis_logs[]
+
+  @@index([run_id], map: "idx_openai_analysis_runs_run_id")
+  @@index([run_status], map: "idx_openai_analysis_runs_run_status")
+  @@index([source_alert_id, source_site_id], map: "idx_openai_analysis_runs_source_alert_site")
+  @@index([thread_id], map: "idx_openai_analysis_runs_thread_id")
+}
+
+/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
+model pulse_closed {
+  site_id  BigInt
+  alert_id String @db.VarChar(255)
+  status   String @db.VarChar(100)
+
+  @@ignore
+}
+
+model purifai_group_settings {
+  id              BigInt    @id @default(autoincrement())
+  group_name      String    @db.VarChar(255)
+  site_id         BigInt
+  user_id         BigInt
+  global_group_id String    @db.VarChar(255)
+  status          Boolean?  @default(true)
+  created_at      DateTime? @default(now()) @db.DateTime(0)
+  updated_at      DateTime? @default(now()) @db.DateTime(0)
+}
+
+model purifai_notification {
+  id             BigInt    @id @default(autoincrement())
+  site_id        BigInt?
+  user_id        BigInt?
+  realtime       Boolean?  @default(false)
+  anomaly        Boolean?  @default(false)
+  daily          Boolean?  @default(false)
+  weekly         Boolean?  @default(false)
+  created_at     DateTime? @default(now()) @db.DateTime(0)
+  updated_at     DateTime? @default(now()) @db.DateTime(0)
+  status         Boolean?  @default(true)
+  token          String?   @db.VarChar(512)
+  rolling_window Int?      @default(4)
+}
+
+model purifai_notification_channel_delivery {
+  id                  BigInt   @id @default(autoincrement())
+  notification_id     String   @db.VarChar(64)
+  site_id             Int
+  user_id             String   @db.VarChar(64)
+  channel             String   @db.VarChar(32)
+  target_token        String?  @db.VarChar(512)
+  target_id           String?  @db.VarChar(128)
+  status              String   @db.VarChar(32)
+  attempt_count       Int      @default(1)
+  provider_message_id String?  @db.VarChar(255)
+  error_message       String?  @db.VarChar(255)
+  payload_json        String?  @db.Text
+  attempted_at        DateTime @db.DateTime(0)
+  created_at          DateTime @default(now()) @db.DateTime(0)
+
+  @@index([notification_id], map: "idx_purifai_notification_channel_delivery_notification")
+  @@index([site_id, user_id, channel], map: "idx_purifai_notification_channel_delivery_site_user_channel")
+  @@index([status, attempted_at], map: "idx_purifai_notification_channel_delivery_status_time")
+  @@index([target_token], map: "idx_purifai_notification_channel_delivery_target_token")
+}
+
+model purifai_notification_delivery_history {
+  id              BigInt   @id @default(autoincrement())
+  delivery_key    String   @db.VarChar(768)
+  notification_id BigInt
+  site_id         Int
+  user_id         String   @db.VarChar(64)
+  token           String   @db.VarChar(512)
+  pulse_frequency String   @db.VarChar(32)
+  delivery_status String   @db.VarChar(32)
+  error_message   String?  @db.VarChar(255)
+  attempted_at    DateTime @db.DateTime(0)
+  created_at      DateTime @default(now()) @db.DateTime(0)
+
+  @@index([attempted_at], map: "idx_purifai_notification_delivery_history_attempted_at")
+  @@index([delivery_key], map: "idx_purifai_notification_delivery_history_delivery_key")
+  @@index([notification_id], map: "idx_purifai_notification_delivery_history_notification")
+}
+
+model purifai_notification_delivery_state {
+  id              BigInt    @id @default(autoincrement())
+  delivery_key    String    @unique(map: "uq_purifai_notification_delivery_state_delivery_key") @db.VarChar(768)
+  notification_id BigInt
+  site_id         Int
+  user_id         String    @db.VarChar(64)
+  token           String    @db.VarChar(512)
+  pulse_frequency String    @db.VarChar(32)
+  last_sent_at    DateTime? @db.DateTime(0)
+  last_status     String    @default("pending") @db.VarChar(32)
+  last_error      String?   @db.VarChar(255)
+  created_at      DateTime  @default(now()) @db.DateTime(0)
+  updated_at      DateTime  @default(now()) @db.DateTime(0)
+
+  @@index([last_sent_at], map: "idx_purifai_notification_delivery_state_last_sent")
+  @@index([notification_id], map: "idx_purifai_notification_delivery_state_notification")
+  @@index([site_id, user_id], map: "idx_purifai_notification_delivery_state_site_user")
+}
+
+model purifai_notification_ws_connections {
+  connection_id String   @id @db.VarChar(255)
+  site_id       Int
+  user_id       String   @db.VarChar(64)
+  domain_name   String   @db.VarChar(255)
+  stage_name    String   @db.VarChar(128)
+  created_at    DateTime @default(now()) @db.DateTime(0)
+  updated_at    DateTime @default(now()) @db.DateTime(0)
+
+  @@index([site_id, user_id], map: "idx_purifai_notification_ws_connections_site_user")
+}
+
+model purifai_web_notifications {
+  id                   String   @id @db.VarChar(64)
+  site_id              Int
+  user_id              String   @db.VarChar(64)
+  timestamp            DateTime @db.DateTime(0)
+  title                String   @db.VarChar(255)
+  alert_name           String?  @db.VarChar(255)
+  severity             String   @default("Info") @db.VarChar(16)
+  process_unit         String   @db.VarChar(255)
+  notification_message String   @db.Text
+  parameter            String?  @db.VarChar(255)
+  description          String?  @db.Text
+  root_cause           String?  @db.Text
+  actions_json         String?  @db.Text
+  route                String?  @db.VarChar(512)
+  layer                String?  @db.VarChar(255)
+  read_flag            Boolean  @default(false)
+  created_at           DateTime @default(now()) @db.DateTime(0)
+  updated_at           DateTime @default(now()) @db.DateTime(0)
+
+  @@index([site_id, user_id, read_flag], map: "idx_purifai_web_notifications_site_user_read")
+  @@index([site_id, user_id, timestamp], map: "idx_purifai_web_notifications_site_user_time")
+}
+
+model report_updation_history {
+  id           Int      @id @default(autoincrement()) @db.UnsignedInt
+  user_id      Int
+  site_id      Int
+  dashboard_id Int
+  timestamp    DateTime @default(now()) @db.DateTime(0)
+}
+
+model tbl_category_site {
+  subCat_site_id Int      @id @default(autoincrement())
+  site_id        Int
+  subCategory_id Int
+  status         Boolean? @default(true)
+}
+
+model tbl_data_116 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime? @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean?
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+}
+
+model tbl_data_118 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime? @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean?
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+}
+
+model tbl_data_119 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime? @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean?
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+}
+
+model tbl_data_120 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime? @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean?
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+}
+
+model tbl_data_6 {
+  id         Int       @id @default(autoincrement()) @db.UnsignedInt
+  uploadid   String?   @db.VarChar(255)
+  record_id  Int?
+  site_id    Int?
+  adddate    DateTime  @db.Date
+  code       String?   @db.VarChar(250)
+  value      String?   @db.VarChar(250)
+  added_by   Int?
+  ip_address String?   @db.VarChar(100)
+  position   String?   @db.VarChar(50)
+  channel    Int?
+  sampleId   String?   @db.VarChar(255)
+  status     Boolean   @default(true)
+  date       DateTime? @db.DateTime(0)
+  grpdate    DateTime? @db.Date
+  uploaddate DateTime? @db.DateTime(0)
+
+  @@index([code], map: "data_code_id")
+  @@index([site_id, date, code], map: "data_mix")
+  @@index([site_id], map: "data_site_id")
+  @@index([site_id, date, code, status], map: "idx_complex_upload_query")
+  @@index([site_id, status, date, code], map: "idx_data_main")
+  @@index([site_id, date, code, status], map: "idx_siteid_date_code_status")
+  @@index([code], map: "idx_tbl_data_51_code")
+  @@index([date], map: "idx_tbl_data_51_date")
+  @@index([date, code], map: "idx_tbl_data_51_date_code")
+  @@index([adddate], map: "idx_tbl_upload_data_adddate")
+  @@index([date], map: "idx_tbl_upload_data_date")
+  @@index([code, site_id, status], map: "idx_upload_data_code")
+  @@index([site_id, date, status], map: "idx_upload_data_site_date")
+  @@index([site_id, status, date], map: "idx_upload_data_site_status")
+}
+
+model tbl_pin_dms {
+  pin_id     Int       @id @default(autoincrement())
+  pin        String?   @db.Text
+  user_id    Int?
+  status     Boolean?
+  ip_address String?   @db.VarChar(100)
+  location   String?   @db.VarChar(255)
+  created_at DateTime? @db.DateTime(0)
 }
 
 enum RegistrationStatus {

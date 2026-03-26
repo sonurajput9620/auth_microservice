@@ -46,6 +46,34 @@
       }
     },
     {
+      "name": "2a. Request Phone Verification",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{username}}\"\n}"
+        },
+        "url": "{{baseUrl}}/api/{{apiVersion}}/auth/phone/request-verification"
+      }
+    },
+    {
+      "name": "2b. Confirm Phone Verification",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{username}}\",\n  \"confirmation_code\": \"{{confirmationCode}}\"\n}"
+        },
+        "url": "{{baseUrl}}/api/{{apiVersion}}/auth/phone/confirm"
+      }
+    },
+    {
       "name": "3. Review Registration - APPROVE",
       "request": {
         "method": "POST",
