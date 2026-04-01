@@ -69,15 +69,6 @@ export const confirmForgotPasswordSchema = z.object({
   new_password: z.string().min(8)
 });
 
-export const requestPhoneVerificationSchema = z.object({
-  username: z.string().min(3)
-});
-
-export const confirmPhoneVerificationSchema = z.object({
-  username: z.string().min(3),
-  confirmation_code: z.string().min(4)
-});
-
 export type SignUpPayload = z.infer<typeof signUpSchema>;
 export type ConfirmSignUpPayload = z.infer<typeof confirmSignUpSchema>;
 export type ApproveRegistrationPayload = z.infer<typeof approveRegistrationSchema>;
@@ -85,5 +76,3 @@ export type LoginInitiatePayload = z.infer<typeof loginInitiateSchema>;
 export type LoginRespondPayload = z.infer<typeof loginRespondSchema>;
 export type ForgotPasswordPayload = z.infer<typeof forgotPasswordSchema>;
 export type ConfirmForgotPasswordPayload = z.infer<typeof confirmForgotPasswordSchema>;
-export type RequestPhoneVerificationPayload = z.infer<typeof requestPhoneVerificationSchema>;
-export type ConfirmPhoneVerificationPayload = z.infer<typeof confirmPhoneVerificationSchema>;

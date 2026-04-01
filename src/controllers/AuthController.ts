@@ -7,12 +7,10 @@ import { Logger } from "../utils/Logger";
 import {
   approveRegistrationSchema,
   confirmForgotPasswordSchema,
-  confirmPhoneVerificationSchema,
   confirmSignUpSchema,
   forgotPasswordSchema,
   loginInitiateSchema,
   loginRespondSchema,
-  requestPhoneVerificationSchema,
   signUpSchema
 } from "../validations/AuthValidation";
 
@@ -138,32 +136,4 @@ export class AuthController {
     ApiResponse.ok(res, "Password reset successful.", null);
   }
 
-  public static async requestPhoneVerification(req: Request, res: Response): Promise<void> {
-    const payload = requestPhoneVerificationSchema.parse(req.body);
-    Logger.debug("Phone verification request initiated", { username: payload.username });
-
-    const data = await AuthService.requestPhoneVerification(payload);
-
-    Logger.info("Phone verification code sent", { username: payload.username });
-
-    ApiResponse.ok(res, "Phone verification code sent.", data);
-  }
-
-  public static async confirmPhoneVerification(req: Request, res: Response): Promise<void> {
-    const payload = confirmPhoneVerificationSchema.parse(req.body);
-    Logger.debug("Phone confirmation initiated", { username: payload.username });
-
-    const data = await AuthService.confirmPhoneVerification(payload);
-
-    Logger.info("Phone verified successfully", {
-      username: payload.username,
-      registration_id: data.registration_id
-    });
-
-    ApiResponse.ok(
-      res,
-      "Phone number verified successfully. Registration is pending admin approval.",
-      data
-    );
-  }
 }

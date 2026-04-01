@@ -1,11 +1,11 @@
 import {
+  AdminInitiateAuthCommand,
+  AdminRespondToAuthChallengeCommand,
   CognitoIdentityProviderClient,
   ChallengeNameType,
   ConfirmForgotPasswordCommand,
   ConfirmSignUpCommand,
   ForgotPasswordCommand,
-  InitiateAuthCommand,
-  RespondToAuthChallengeCommand,
   SignUpCommand
 } from "@aws-sdk/client-cognito-identity-provider";
 import { StatusCodes } from "http-status-codes";
@@ -13,16 +13,13 @@ import { StatusCodes } from "http-status-codes";
 import { prisma } from "../prismaClient";
 import { AppError } from "../utils/AppError";
 import { Logger } from "../utils/Logger";
-import { SmsService } from "../utils/SmsService";
 import {
   ApproveRegistrationPayload,
   ConfirmForgotPasswordPayload,
-  ConfirmPhoneVerificationPayload,
   ConfirmSignUpPayload,
   ForgotPasswordPayload,
   LoginInitiatePayload,
   LoginRespondPayload,
-  RequestPhoneVerificationPayload,
   SignUpPayload
 } from "../validations/AuthValidation";
 
@@ -39,6 +36,7 @@ const getEnv = (key: string): string => {
 };
 
 const COGNITO_CLIENT_ID = getEnv("COGNITO_CLIENT_ID");
+const COGNITO_USER_POOL_ID = getEnv("COGNITO_USER_POOL_ID");
 const AWS_REGION = getEnv("AWS_DEFAULT_REGION");
 const cognitoClient = new CognitoIdentityProviderClient({
   region: AWS_REGION
@@ -54,14 +52,11 @@ const normalizePhone = (phone: string): string => {
 const mapChallengeCodeKey = (challengeName: string): string => {
   const normalized = challengeName.toUpperCase();
 
-  if (normalized === "SMS_MFA") {
-    return "SMS_MFA_CODE";
+  if (normalized === "EMAIL_OTP") {
+    return "EMAIL_OTP_CODE";
   }
   if (normalized === "SOFTWARE_TOKEN_MFA") {
     return "SOFTWARE_TOKEN_MFA_CODE";
-  }
-  if (normalized === "EMAIL_OTP") {
-    return "EMAIL_OTP_CODE";
   }
 
   throw new AppError(
@@ -74,7 +69,6 @@ const mapChallengeCodeKey = (challengeName: string): string => {
 const toChallengeNameType = (challengeName: string): ChallengeNameType => {
   const normalized = challengeName.toUpperCase();
   if (
-    normalized === "SMS_MFA" ||
     normalized === "SOFTWARE_TOKEN_MFA" ||
     normalized === "EMAIL_OTP"
   ) {
@@ -113,6 +107,57 @@ const toPublicTokens = (result?: {
     refresh_token: result.RefreshToken ?? null,
     expires_in: result.ExpiresIn ?? null
   };
+};
+
+const getCognitoErrorName = (err: unknown): string | undefined =>
+  (err as { name?: string })?.name;
+
+const throwLoginError = (errorName: string | undefined): never => {
+  if (errorName === "NotAuthorizedException") {
+    throw new AppError(
+      StatusCodes.UNAUTHORIZED,
+      "InvalidCredentials",
+      "Invalid username or password."
+    );
+  }
+
+  if (errorName === "UserNotFoundException") {
+    throw new AppError(
+      StatusCodes.NOT_FOUND,
+      "UserNotFound",
+      "User not found in Cognito."
+    );
+  }
+
+  if (errorName === "PasswordResetRequiredException") {
+    throw new AppError(
+      StatusCodes.FORBIDDEN,
+      "PasswordResetRequired",
+      "Password reset is required before login."
+    );
+  }
+
+  if (errorName === "UserNotConfirmedException") {
+    throw new AppError(
+      StatusCodes.FORBIDDEN,
+      "UserNotConfirmed",
+      "User account is not confirmed."
+    );
+  }
+
+  if (errorName === "InvalidParameterException") {
+    throw new AppError(
+      StatusCodes.INTERNAL_SERVER_ERROR,
+      "CognitoClientMisconfigured",
+      "Cognito app client auth flow is not enabled for this login path."
+    );
+  }
+
+  throw new AppError(
+    StatusCodes.UNAUTHORIZED,
+    "AuthenticationFailed",
+    "Authentication failed."
+  );
 };
 
 export class AuthService {
@@ -452,9 +497,10 @@ export class AuthService {
       });
 
       const response = await cognitoClient.send(
-        new InitiateAuthCommand({
-          AuthFlow: "USER_PASSWORD_AUTH",
+        new AdminInitiateAuthCommand({
+          AuthFlow: "ADMIN_USER_PASSWORD_AUTH",
           ClientId: COGNITO_CLIENT_ID,
+          UserPoolId: COGNITO_USER_POOL_ID,
           AuthParameters: {
             USERNAME: payload.username,
             PASSWORD: payload.password
@@ -485,9 +531,16 @@ export class AuthService {
       };
     } catch (err: unknown) {
       const error = err instanceof Error ? err : new Error(String(err));
+      const errorName = getCognitoErrorName(err);
       Logger.error("InitiateLogin: Login failed", error, {
-        username: payload.username
+        username: payload.username,
+        error_name: errorName
       });
+
+      if (errorName) {
+        throwLoginError(errorName);
+      }
+
       throw error;
     }
   }
@@ -504,8 +557,9 @@ export class AuthService {
       const challengeKey = mapChallengeCodeKey(payload.challenge_name);
 
       const response = await cognitoClient.send(
-        new RespondToAuthChallengeCommand({
+        new AdminRespondToAuthChallengeCommand({
           ClientId: COGNITO_CLIENT_ID,
+          UserPoolId: COGNITO_USER_POOL_ID,
           ChallengeName: toChallengeNameType(payload.challenge_name),
           Session: payload.session,
           ChallengeResponses: {
@@ -525,10 +579,17 @@ export class AuthService {
       };
     } catch (err: unknown) {
       const error = err instanceof Error ? err : new Error(String(err));
+      const errorName = getCognitoErrorName(err);
       Logger.error("RespondToChallenge: Failed to respond to challenge", error, {
         username: payload.username,
-        challenge_name: payload.challenge_name
+        challenge_name: payload.challenge_name,
+        error_name: errorName
       });
+
+      if (errorName) {
+        throwLoginError(errorName);
+      }
+
       throw error;
     }
   }
@@ -592,212 +653,6 @@ export class AuthService {
       Logger.error("ConfirmForgotPassword: Failed to confirm forgot password", error, {
         username: payload.username
       });
-      throw error;
-    }
-  }
-
-  public static async requestPhoneVerification(
-    payload: RequestPhoneVerificationPayload
-  ): Promise<{
-    destination?: string;
-    delivery_medium?: string;
-  }> {
-    try {
-      Logger.debug("RequestPhoneVerification: Requesting phone verification code", {
-        username: payload.username
-      });
-
-      const registration = await prisma.register_user.findUnique({
-        where: { username: payload.username }
-      });
-
-      if (!registration) {
-        Logger.warn("RequestPhoneVerification: User not found", {
-          username: payload.username
-        });
-
-        throw new AppError(
-          StatusCodes.NOT_FOUND,
-          "UserNotFound",
-          "User not found."
-        );
-      }
-
-      if (!registration.email_verified) {
-        Logger.warn("RequestPhoneVerification: Email not verified", {
-          username: payload.username
-        });
-
-        throw new AppError(
-          StatusCodes.BAD_REQUEST,
-          "EmailNotVerified",
-          "Please verify your email before verifying phone number."
-        );
-      }
-
-      if (registration.phone_verified) {
-        Logger.info("RequestPhoneVerification: Phone already verified", {
-          username: payload.username
-        });
-
-        return {
-          
-          destination: registration.phone?.replace(/\d(?=\d{4})/g, '*'),
-          delivery_medium: "SMS"
-        };
-      }
-
-      if (!registration.phone) {
-        throw new AppError(
-          StatusCodes.BAD_REQUEST,
-          "PhoneNotFound",
-          "Phone number not set for this user."
-        );
-      }
-
-      // Generate verification code
-      const verificationCode = SmsService.generateVerificationCode();
-      const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-
-      // Save verification code to database
-      await prisma.register_user.update({
-        where: { id: registration.id },
-        data: {
-          phone_verification_code: verificationCode,
-          phone_verification_code_expires_at: expiresAt
-        }
-      });
-
-      // Send SMS
-      await SmsService.sendVerificationCode(
-        registration.phone,
-        verificationCode
-      );
-
-      Logger.info("RequestPhoneVerification: Verification code sent to phone", {
-        username: payload.username,
-        expires_at: expiresAt
-      });
-
-      return {
-        destination: registration.phone.replace(/\d(?=\d{4})/g, '*'),
-        delivery_medium: "SMS"
-      };
-    } catch (err: unknown) {
-      const error = err instanceof Error ? err : new Error(String(err));
-      Logger.error("RequestPhoneVerification: Failed to send verification code", error, {
-        username: payload.username
-      });
-      throw error;
-    }
-  }
-
-  public static async confirmPhoneVerification(
-    payload: ConfirmPhoneVerificationPayload
-  ): Promise<{
-    registration_id: number;
-    status: string;
-  }> {
-    try {
-      Logger.debug("ConfirmPhoneVerification: Confirming phone number", {
-        username: payload.username
-      });
-
-      const existing = await prisma.register_user.findUnique({
-        where: { username: payload.username }
-      });
-
-      if (!existing) {
-        Logger.warn("ConfirmPhoneVerification: Registration not found", {
-          username: payload.username
-        });
-
-        throw new AppError(
-          StatusCodes.NOT_FOUND,
-          "RegistrationNotFound",
-          "Registration not found."
-        );
-      }
-
-      if (!existing.email_verified) {
-        throw new AppError(
-          StatusCodes.BAD_REQUEST,
-          "EmailNotVerified",
-          "Please verify your email first."
-        );
-      }
-
-      if (existing.phone_verified) {
-        Logger.info("ConfirmPhoneVerification: Phone already verified", {
-          username: payload.username
-        });
-
-        return {
-          registration_id: existing.id,
-          status: existing.status
-        };
-      }
-
-      // Check if verification code exists
-      if (!existing.phone_verification_code) {
-        throw new AppError(
-          StatusCodes.BAD_REQUEST,
-          "NoVerificationCode",
-          "No verification code found. Please request a new code."
-        );
-      }
-
-      // Check if code has expired
-      if (
-        !existing.phone_verification_code_expires_at ||
-        existing.phone_verification_code_expires_at < new Date()
-      ) {
-        throw new AppError(
-          StatusCodes.BAD_REQUEST,
-          "ExpiredConfirmationCode",
-          "Verification code has expired. Please request a new code."
-        );
-      }
-
-      // Verify the code
-      if (existing.phone_verification_code !== payload.confirmation_code) {
-        throw new AppError(
-          StatusCodes.BAD_REQUEST,
-          "InvalidConfirmationCode",
-          "Invalid verification code. Please check and try again."
-        );
-      }
-
-      Logger.info("ConfirmPhoneVerification: Phone code verified", {
-        username: payload.username
-      });
-
-      // Mark phone as verified and clear the verification code
-      const updated = await prisma.register_user.update({
-        where: { id: existing.id },
-        data: {
-          phone_verified: true,
-          phone_verification_code: null,
-          phone_verification_code_expires_at: null
-        }
-      });
-
-      Logger.info("ConfirmPhoneVerification: Registration updated", {
-        registration_id: updated.id,
-        phone_verified: updated.phone_verified
-      });
-
-      return {
-        registration_id: updated.id,
-        status: updated.status
-      };
-    } catch (err: unknown) {
-      const error = err instanceof Error ? err : new Error(String(err));
-
-      Logger.error("ConfirmPhoneVerification: Failed to confirm phone verification", error, {
-        username: payload.username
-      });
-
       throw error;
     }
   }
