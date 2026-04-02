@@ -1,6 +1,6 @@
 import { Router } from "express";
 
-import { UserController } from "../../controllers/UserController";
+import { RoleManagementController } from "../../controllers/RoleManagementController";
 import {
   RequireAnyPermission,
   RequireAuth
@@ -10,17 +10,10 @@ import { AsyncTryCatch } from "../../utils/AsyncTryCatch";
 const router = Router();
 
 router.get(
-  "/",
+  "/bootstrap",
   RequireAuth,
   RequireAnyPermission("role-management.view", "roles.read"),
-  AsyncTryCatch(UserController.getUsers)
-);
-router.post("/", AsyncTryCatch(UserController.createUser));
-router.patch(
-  "/:userId/role",
-  RequireAuth,
-  RequireAnyPermission("role-management.manage", "roles.write"),
-  AsyncTryCatch(UserController.assignRole)
+  AsyncTryCatch(RoleManagementController.getBootstrap)
 );
 
 export default router;

@@ -1,32 +1,13 @@
-import cors from "cors";
 import dotenv from "dotenv";
-import express, { Application } from "express";
 
-import { GlobalErrorHandler } from "./middlewares/GlobalErrorHandler";
-import { RequestResponseLoggingMiddleware } from "./middlewares/RequestResponseLoggingMiddleware";
+import { createApp } from "./app";
 import { connectDB, disconnectDB } from "./prismaClient";
 import { Logger } from "./utils/Logger";
-import { ApiResponse } from "./utils/ApiResponse";
-import v1Router from "./routes/v1";
 
 dotenv.config();
 
-const app: Application = express();
+const app = createApp();
 const port: number = Number(process.env.PORT) || 4100;
-
-app.use(cors());
-app.use(express.json());
-
-// Request/Response logging middleware
-app.use(RequestResponseLoggingMiddleware);
-
-app.get("/health", (_req, res) => {
-  Logger.info("Health check called");
-  ApiResponse.ok(res, "Auth microservice is healthy.", { status: "operational" });
-});
-
-app.use("/api/v1", v1Router);
-app.use(GlobalErrorHandler);
 
 const bootstrap = async (): Promise<void> => {
   try {

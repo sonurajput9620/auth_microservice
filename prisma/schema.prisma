@@ -2850,42 +2850,46 @@ model tbl_users {
 }
 
 model register_user {
-  id                                 Int                @id @default(autoincrement())
-  cognito_sub                        String?            @unique(map: "uniq_register_user_cognito_sub") @db.VarChar(255)
-  username                           String             @unique(map: "uniq_register_user_username") @db.VarChar(120)
-  first_name                         String?            @db.VarChar(120)
-  last_name                          String?            @db.VarChar(120)
-  email                              String?            @unique(map: "uniq_register_user_email") @db.VarChar(255)
-  phone                              String?            @db.VarChar(30)
-  status                             RegistrationStatus @default(PENDING_APPROVAL)
-  reviewed_by                        Int?
-  reviewed_at                        DateTime?          @db.DateTime(0)
-  review_note                        String?            @db.VarChar(500)
-  email_verified                     Boolean            @default(false)
-  created_at                         DateTime           @default(now()) @db.DateTime(0)
-  updated_at                         DateTime           @updatedAt @db.DateTime(0)
-  app_user                           app_user?
+  id             Int                @id @default(autoincrement())
+  cognito_sub    String?            @unique(map: "uniq_register_user_cognito_sub") @db.VarChar(255)
+  username       String             @unique(map: "uniq_register_user_username") @db.VarChar(120)
+  first_name     String?            @db.VarChar(120)
+  last_name      String?            @db.VarChar(120)
+  email          String?            @unique(map: "uniq_register_user_email") @db.VarChar(255)
+  phone          String?            @db.VarChar(30)
+  status         RegistrationStatus @default(PENDING_APPROVAL)
+  reviewed_by    Int?
+  reviewed_at    DateTime?          @db.DateTime(0)
+  review_note    String?            @db.VarChar(500)
+  email_verified Boolean            @default(false)
+  created_at     DateTime           @default(now()) @db.DateTime(0)
+  updated_at     DateTime           @updatedAt @db.DateTime(0)
+  app_user       app_user?
 
   @@index([status], map: "idx_register_user_status")
 }
 
 model app_user {
-  id               Int           @id @default(autoincrement())
-  register_user_id Int           @unique(map: "uniq_app_user_register_user")
-  cognito_sub      String?       @unique(map: "uniq_app_user_cognito_sub") @db.VarChar(255)
-  username         String        @unique(map: "uniq_app_user_username") @db.VarChar(120)
-  first_name       String?       @db.VarChar(120)
-  last_name        String?       @db.VarChar(120)
-  email            String?       @db.VarChar(255)
-  phone            String?       @db.VarChar(30)
-  role_id          Int?
-  site_id          Int?
-  corporation_id   Int?
-  status           Boolean       @default(true)
-  created_at       DateTime      @default(now()) @db.DateTime(0)
-  updated_at       DateTime      @updatedAt @db.DateTime(0)
-  register_user    register_user @relation(fields: [register_user_id], references: [id])
+  id                Int                   @id @default(autoincrement())
+  register_user_id  Int                   @unique(map: "uniq_app_user_register_user")
+  cognito_sub       String?               @unique(map: "uniq_app_user_cognito_sub") @db.VarChar(255)
+  username          String                @unique(map: "uniq_app_user_username") @db.VarChar(120)
+  first_name        String?               @db.VarChar(120)
+  last_name         String?               @db.VarChar(120)
+  email             String?               @db.VarChar(255)
+  phone             String?               @db.VarChar(30)
+  role_id           Int?
+  site_id           Int?
+  corporation_id    Int?
+  status            Boolean               @default(true)
+  created_at        DateTime              @default(now()) @db.DateTime(0)
+  updated_at        DateTime              @updatedAt @db.DateTime(0)
+  register_user     register_user         @relation(fields: [register_user_id], references: [id])
+  roles             roles?                @relation(fields: [role_id], references: [id], onUpdate: Cascade, onDelete: SetNull, map: "fk_app_user_role")
+  roleTemplates     role_templates[]
+  featureImportJobs feature_import_jobs[]
 
+  @@index([role_id], map: "idx_app_user_role_id")
   @@index([site_id], map: "idx_app_user_site_id")
   @@index([corporation_id], map: "idx_app_user_corporation_id")
   @@index([status], map: "idx_app_user_status")
@@ -3245,6 +3249,163 @@ model tbl_pin_dms {
   ip_address String?   @db.VarChar(100)
   location   String?   @db.VarChar(255)
   created_at DateTime? @db.DateTime(0)
+}
+
+model permission_catalog_versions {
+  id                  Int                   @id @default(autoincrement())
+  version_code        String                @unique(map: "uq_permission_catalog_versions_version_code") @db.VarChar(64)
+  source              catalog_source_enum
+  notes               String?               @db.VarChar(255)
+  payload_json        Json?
+  created_at          DateTime              @default(now()) @db.DateTime(0)
+  permission_features permission_features[]
+  feature_import_jobs feature_import_jobs[]
+}
+
+model permission_features {
+  id                          Int                          @id @default(autoincrement())
+  feature_key                 String                       @unique(map: "uq_permission_features_feature_key") @db.VarChar(64)
+  feature_group               String                       @db.VarChar(64)
+  feature_name                String                       @db.VarChar(120)
+  feature_description         String?                      @db.VarChar(500)
+  is_system_feature           Boolean                      @default(false)
+  is_active                   Boolean                      @default(true)
+  sort_order                  Int                          @default(0)
+  catalog_version_id          Int?
+  created_at                  DateTime                     @default(now()) @db.DateTime(0)
+  updated_at                  DateTime                     @default(now()) @updatedAt @db.DateTime(0)
+  permission_catalog_versions permission_catalog_versions? @relation(fields: [catalog_version_id], references: [id], onUpdate: Cascade, onDelete: SetNull, map: "fk_permission_features_catalog_version")
+  permission_sub_features     permission_sub_features[]
+
+  @@index([feature_group, is_active, sort_order], map: "idx_permission_features_group_active")
+}
+
+model permission_sub_features {
+  id                                    Int                                     @id @default(autoincrement())
+  feature_id                            Int
+  sub_feature_key                       String                                  @unique(map: "uq_permission_sub_features_key") @db.VarChar(80)
+  sub_feature_name                      String                                  @db.VarChar(120)
+  sub_feature_description               String?                                 @db.VarChar(500)
+  is_active                             Boolean                                 @default(true)
+  sort_order                            Int                                     @default(0)
+  created_at                            DateTime                                @default(now()) @db.DateTime(0)
+  updated_at                            DateTime                                @default(now()) @updatedAt @db.DateTime(0)
+  permission_features                   permission_features                     @relation(fields: [feature_id], references: [id], onUpdate: Cascade, onDelete: Cascade, map: "fk_permission_sub_features_feature")
+  role_sub_feature_permissions          role_sub_feature_permissions[]
+  role_template_sub_feature_permissions role_template_sub_feature_permissions[]
+
+  @@index([feature_id, is_active, sort_order], map: "idx_permission_sub_features_feature_active")
+}
+
+model roles {
+  id                           Int                            @id @default(autoincrement())
+  role_uid                     String                         @unique(map: "uq_roles_role_uid") @db.Char(36)
+  role_name                    String                         @db.VarChar(120)
+  role_description             String                         @db.Text
+  role_category                String?                        @db.VarChar(80)
+  role_type                    role_type_enum                 @default(CUSTOM)
+  status                       role_status_enum               @default(ACTIVE)
+  is_deleted                   Boolean                        @default(false)
+  deleted_at                   DateTime?                      @db.DateTime(0)
+  created_at                   DateTime                       @default(now()) @db.DateTime(0)
+  updated_at                   DateTime                       @default(now()) @updatedAt @db.DateTime(0)
+  app_user                     app_user[]
+  role_sub_feature_permissions role_sub_feature_permissions[]
+
+  @@unique([role_name, is_deleted], map: "uq_roles_role_name_not_deleted")
+  @@index([status, role_type, is_deleted], map: "idx_roles_status_type_deleted")
+}
+
+model role_sub_feature_permissions {
+  role_id                 Int
+  sub_feature_id          Int
+  is_enabled              Boolean                 @default(false)
+  created_at              DateTime                @default(now()) @db.DateTime(0)
+  updated_at              DateTime                @default(now()) @updatedAt @db.DateTime(0)
+  roles                   roles                   @relation(fields: [role_id], references: [id], onUpdate: Cascade, onDelete: Cascade, map: "fk_role_sub_feature_permissions_role")
+  permission_sub_features permission_sub_features @relation(fields: [sub_feature_id], references: [id], onUpdate: Cascade, onDelete: Cascade, map: "fk_role_sub_feature_permissions_sub_feature")
+
+  @@id([role_id, sub_feature_id])
+  @@index([is_enabled], map: "idx_role_sub_feature_permissions_enabled")
+  @@index([sub_feature_id], map: "idx_role_sub_feature_permissions_sub_feature")
+}
+
+model role_templates {
+  id                                    Int                                     @id @default(autoincrement())
+  template_uid                          String                                  @unique(map: "uq_role_templates_template_uid") @db.Char(36)
+  template_name                         String                                  @unique(map: "uq_role_templates_template_name") @db.VarChar(120)
+  created_by                            Int?
+  is_active                             Boolean                                 @default(true)
+  created_at                            DateTime                                @default(now()) @db.DateTime(0)
+  updated_at                            DateTime                                @default(now()) @updatedAt @db.DateTime(0)
+  app_user                              app_user?                               @relation(fields: [created_by], references: [id], onUpdate: Cascade, onDelete: SetNull, map: "fk_role_templates_created_by")
+  role_template_sub_feature_permissions role_template_sub_feature_permissions[]
+
+  @@index([created_by], map: "idx_role_templates_created_by")
+}
+
+model role_template_sub_feature_permissions {
+  template_id             Int
+  sub_feature_id          Int
+  is_enabled              Boolean                 @default(false)
+  created_at              DateTime                @default(now()) @db.DateTime(0)
+  updated_at              DateTime                @default(now()) @updatedAt @db.DateTime(0)
+  role_templates          role_templates          @relation(fields: [template_id], references: [id], onUpdate: Cascade, onDelete: Cascade, map: "fk_role_template_sub_feature_permissions_template")
+  permission_sub_features permission_sub_features @relation(fields: [sub_feature_id], references: [id], onUpdate: Cascade, onDelete: Cascade, map: "fk_role_template_sub_feature_permissions_sub_feature")
+
+  @@id([template_id, sub_feature_id])
+  @@index([sub_feature_id], map: "idx_role_template_sub_feature_permissions_sub_feature")
+}
+
+model feature_import_jobs {
+  id                          Int                             @id @default(autoincrement())
+  import_uid                  String                          @unique(map: "uq_feature_import_jobs_import_uid") @db.Char(36)
+  source_filename             String?                         @db.VarChar(255)
+  source_type                 feature_import_source_type_enum
+  status                      feature_import_status_enum
+  total_rows                  Int                             @default(0) @db.UnsignedInt
+  valid_rows                  Int                             @default(0) @db.UnsignedInt
+  error_count                 Int                             @default(0) @db.UnsignedInt
+  warning_count               Int                             @default(0) @db.UnsignedInt
+  errors_json                 Json?
+  warnings_json               Json?
+  triggered_by                Int?
+  catalog_version_id          Int?
+  started_at                  DateTime                        @default(now()) @db.DateTime(0)
+  completed_at                DateTime?                       @db.DateTime(0)
+  app_user                    app_user?                       @relation(fields: [triggered_by], references: [id], onUpdate: Cascade, onDelete: SetNull, map: "fk_feature_import_jobs_triggered_by")
+  permission_catalog_versions permission_catalog_versions?    @relation(fields: [catalog_version_id], references: [id], onUpdate: Cascade, onDelete: SetNull, map: "fk_feature_import_jobs_catalog_version")
+
+  @@index([status, started_at], map: "idx_feature_import_jobs_status_started_at")
+  @@index([triggered_by], map: "idx_feature_import_jobs_triggered_by")
+}
+
+enum catalog_source_enum {
+  DEMO
+  IMPORT
+  MANUAL
+}
+
+enum role_type_enum {
+  SYSTEM
+  CUSTOM
+}
+
+enum role_status_enum {
+  ACTIVE
+  INACTIVE
+}
+
+enum feature_import_source_type_enum {
+  CSV
+  JSON
+  DEMO_RESTORE
+}
+
+enum feature_import_status_enum {
+  VALIDATED
+  APPLIED
+  FAILED
 }
 
 enum RegistrationStatus {
