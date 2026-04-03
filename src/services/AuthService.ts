@@ -6,7 +6,7 @@ import {
   ConfirmForgotPasswordCommand,
   ConfirmSignUpCommand,
   ForgotPasswordCommand,
-  SignUpCommand
+  SignUpCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
 import { StatusCodes } from "http-status-codes";
 
@@ -20,8 +20,9 @@ import {
   ForgotPasswordPayload,
   LoginInitiatePayload,
   LoginRespondPayload,
-  SignUpPayload
+  SignUpPayload,
 } from "../validations/AuthValidation";
+import e from "cors";
 
 const getEnv = (key: string): string => {
   const value = process.env[key];
@@ -29,7 +30,7 @@ const getEnv = (key: string): string => {
     throw new AppError(
       StatusCodes.INTERNAL_SERVER_ERROR,
       "ConfigError",
-      `${key} is not configured.`
+      `${key} is not configured.`,
     );
   }
   return value;
@@ -39,7 +40,7 @@ const COGNITO_CLIENT_ID = getEnv("COGNITO_CLIENT_ID");
 const COGNITO_USER_POOL_ID = getEnv("COGNITO_USER_POOL_ID");
 const AWS_REGION = getEnv("AWS_DEFAULT_REGION");
 const cognitoClient = new CognitoIdentityProviderClient({
-  region: AWS_REGION
+  region: AWS_REGION,
 });
 
 const normalizePhone = (phone: string): string => {
@@ -62,23 +63,20 @@ const mapChallengeCodeKey = (challengeName: string): string => {
   throw new AppError(
     StatusCodes.BAD_REQUEST,
     "UnsupportedChallenge",
-    `Unsupported challenge type: ${challengeName}`
+    `Unsupported challenge type: ${challengeName}`,
   );
 };
 
 const toChallengeNameType = (challengeName: string): ChallengeNameType => {
   const normalized = challengeName.toUpperCase();
-  if (
-    normalized === "SOFTWARE_TOKEN_MFA" ||
-    normalized === "EMAIL_OTP"
-  ) {
+  if (normalized === "SOFTWARE_TOKEN_MFA" || normalized === "EMAIL_OTP") {
     return normalized as ChallengeNameType;
   }
 
   throw new AppError(
     StatusCodes.BAD_REQUEST,
     "UnsupportedChallenge",
-    `Unsupported challenge type: ${challengeName}`
+    `Unsupported challenge type: ${challengeName}`,
   );
 };
 
@@ -97,7 +95,7 @@ const toPublicTokens = (result?: {
     throw new AppError(
       StatusCodes.UNAUTHORIZED,
       "AuthenticationFailed",
-      "Authentication failed. Missing token response from Cognito."
+      "Authentication failed. Missing token response from Cognito.",
     );
   }
 
@@ -105,7 +103,7 @@ const toPublicTokens = (result?: {
     access_token: result.AccessToken,
     id_token: result.IdToken,
     refresh_token: result.RefreshToken ?? null,
-    expires_in: result.ExpiresIn ?? null
+    expires_in: result.ExpiresIn ?? null,
   };
 };
 
@@ -117,7 +115,7 @@ const throwLoginError = (errorName: string | undefined): never => {
     throw new AppError(
       StatusCodes.UNAUTHORIZED,
       "InvalidCredentials",
-      "Invalid username or password."
+      "Invalid username or password.",
     );
   }
 
@@ -125,7 +123,7 @@ const throwLoginError = (errorName: string | undefined): never => {
     throw new AppError(
       StatusCodes.NOT_FOUND,
       "UserNotFound",
-      "User not found in Cognito."
+      "User not found in Cognito.",
     );
   }
 
@@ -133,7 +131,7 @@ const throwLoginError = (errorName: string | undefined): never => {
     throw new AppError(
       StatusCodes.FORBIDDEN,
       "PasswordResetRequired",
-      "Password reset is required before login."
+      "Password reset is required before login.",
     );
   }
 
@@ -141,7 +139,7 @@ const throwLoginError = (errorName: string | undefined): never => {
     throw new AppError(
       StatusCodes.FORBIDDEN,
       "UserNotConfirmed",
-      "User account is not confirmed."
+      "User account is not confirmed.",
     );
   }
 
@@ -149,14 +147,14 @@ const throwLoginError = (errorName: string | undefined): never => {
     throw new AppError(
       StatusCodes.INTERNAL_SERVER_ERROR,
       "CognitoClientMisconfigured",
-      "Cognito app client auth flow is not enabled for this login path."
+      "Cognito app client auth flow is not enabled for this login path.",
     );
   }
 
   throw new AppError(
     StatusCodes.UNAUTHORIZED,
     "AuthenticationFailed",
-    "Authentication failed."
+    "Authentication failed.",
   );
 };
 
@@ -170,7 +168,7 @@ export class AuthService {
       const fullName = `${payload.first_name} ${payload.last_name}`.trim();
       Logger.debug("SignUp: Creating user in Cognito", {
         username: payload.username,
-        email: payload.email
+        email: payload.email,
       });
 
       const response = await cognitoClient.send(
@@ -184,18 +182,18 @@ export class AuthService {
             { Name: "family_name", Value: payload.last_name },
             { Name: "preferred_username", Value: payload.username },
             { Name: "name", Value: fullName || payload.username },
-            { Name: "phone_number", Value: normalizePhone(payload.phone) }
-          ]
-        })
+            { Name: "phone_number", Value: normalizePhone(payload.phone) },
+          ],
+        }),
       );
 
       Logger.info("SignUp: User created successfully in Cognito", {
         username: payload.username,
-        user_sub: response.UserSub
+        user_sub: response.UserSub,
       });
 
       const existingRegistration = await prisma.register_user.findUnique({
-        where: { username: payload.username }
+        where: { username: payload.username },
       });
 
       if (existingRegistration) {
@@ -205,8 +203,8 @@ export class AuthService {
             first_name: payload.first_name,
             last_name: payload.last_name,
             email: payload.email,
-            phone: normalizePhone(payload.phone)
-          }
+            phone: normalizePhone(payload.phone),
+          },
         });
       } else {
         await prisma.register_user.create({
@@ -217,20 +215,20 @@ export class AuthService {
             email: payload.email,
             phone: normalizePhone(payload.phone),
             email_verified: false,
-            status: "PENDING_APPROVAL"
-          }
+            status: "PENDING_APPROVAL",
+          },
         });
       }
 
       return {
         username: payload.username,
         user_sub: response.UserSub ?? "",
-        code_delivery: response.CodeDeliveryDetails
+        code_delivery: response.CodeDeliveryDetails,
       };
     } catch (err: unknown) {
       const error = err instanceof Error ? err : new Error(String(err));
       Logger.error("SignUp: Failed to create user in Cognito", error, {
-        username: payload.username
+        username: payload.username,
       });
       throw error;
     }
@@ -242,66 +240,68 @@ export class AuthService {
   }> {
     try {
       Logger.debug("ConfirmSignUp: Confirming user email", {
-        username: payload.username
+        username: payload.username,
       });
 
       await cognitoClient.send(
         new ConfirmSignUpCommand({
           ClientId: COGNITO_CLIENT_ID,
           Username: payload.username,
-          ConfirmationCode: payload.confirmation_code
-        })
+          ConfirmationCode: payload.confirmation_code,
+        }),
       );
 
-      Logger.info("ConfirmSignUp: Email confirmed", { username: payload.username });
+      Logger.info("ConfirmSignUp: Email confirmed", {
+        username: payload.username,
+      });
 
       const existing = await prisma.register_user.findUnique({
-        where: { username: payload.username }
+        where: { username: payload.username },
       });
 
       if (existing) {
         Logger.debug("ConfirmSignUp: Updating existing registration", {
-          registration_id: existing.id
+          registration_id: existing.id,
         });
 
         const updated = await prisma.register_user.update({
           where: { id: existing.id },
           data: {
-            email_verified: true
-          }
+            email_verified: true,
+          },
         });
 
         Logger.info("ConfirmSignUp: Registration updated", {
           registration_id: updated.id,
-          status: updated.status
+          status: updated.status,
         });
 
         return {
           registration_id: updated.id,
-          status: updated.status
+          status: updated.status,
         };
       }
 
       Logger.debug("ConfirmSignUp: Creating new registration", {
-        username: payload.username
+        username: payload.username,
       });
 
       const created = await prisma.register_user.create({
         data: {
           username: payload.username,
           email_verified: true,
-          status: "PENDING_APPROVAL"
-        }
+          status: "PENDING_APPROVAL",
+        },
       });
 
       Logger.info("ConfirmSignUp: Registration created", {
         registration_id: created.id,
-        status: created.status
+        status: created.status,
       });
 
       return {
         registration_id: created.id,
-        status: created.status
+        status: created.status,
       };
     } catch (err: unknown) {
       const error = err instanceof Error ? err : new Error(String(err));
@@ -309,14 +309,14 @@ export class AuthService {
 
       Logger.error("ConfirmSignUp: Failed to confirm sign up", error, {
         username: payload.username,
-        error_name: errorName
+        error_name: errorName,
       });
 
       if (errorName === "ExpiredCodeException") {
         throw new AppError(
           StatusCodes.BAD_REQUEST,
           "ExpiredConfirmationCode",
-          "Confirmation code expired. Please request a new code."
+          "Confirmation code expired. Please request a new code.",
         );
       }
 
@@ -324,7 +324,7 @@ export class AuthService {
         throw new AppError(
           StatusCodes.BAD_REQUEST,
           "InvalidConfirmationCode",
-          "Invalid confirmation code. Please check and try again."
+          "Invalid confirmation code. Please check and try again.",
         );
       }
 
@@ -332,7 +332,7 @@ export class AuthService {
         throw new AppError(
           StatusCodes.NOT_FOUND,
           "UserNotFound",
-          "User not found in Cognito."
+          "User not found in Cognito.",
         );
       }
 
@@ -340,7 +340,7 @@ export class AuthService {
         throw new AppError(
           StatusCodes.FORBIDDEN,
           "UserNotAuthorized",
-          "User is not authorized to confirm sign up."
+          "User is not authorized to confirm sign up.",
         );
       }
 
@@ -350,46 +350,46 @@ export class AuthService {
 
   public static async reviewRegistration(
     registrationId: number,
-    payload: ApproveRegistrationPayload
+    payload: ApproveRegistrationPayload,
   ): Promise<{ registration_status: string; app_user_id?: number }> {
     try {
       Logger.debug("ReviewRegistration: Fetching registration", {
-        registration_id: registrationId
+        registration_id: registrationId,
       });
 
       const registration = await prisma.register_user.findUnique({
-        where: { id: registrationId }
+        where: { id: registrationId },
       });
 
       if (!registration) {
         Logger.warn("ReviewRegistration: Registration not found", {
-          registration_id: registrationId
+          registration_id: registrationId,
         });
 
         throw new AppError(
           StatusCodes.NOT_FOUND,
           "RegistrationNotFound",
-          "Registration request not found."
+          "Registration request not found.",
         );
       }
 
       if (registration.status !== "PENDING_APPROVAL") {
         Logger.warn("ReviewRegistration: Invalid registration state", {
           registration_id: registrationId,
-          current_status: registration.status
+          current_status: registration.status,
         });
 
         throw new AppError(
           StatusCodes.BAD_REQUEST,
           "InvalidRegistrationState",
-          "Only pending registrations can be reviewed."
+          "Only pending registrations can be reviewed.",
         );
       }
 
       if (payload.action === "REJECT") {
         Logger.info("ReviewRegistration: Rejecting registration", {
           registration_id: registrationId,
-          reviewed_by: payload.approved_by
+          reviewed_by: payload.approved_by,
         });
 
         const rejected = await prisma.register_user.update({
@@ -398,18 +398,18 @@ export class AuthService {
             status: "REJECTED",
             reviewed_by: payload.approved_by,
             reviewed_at: new Date(),
-            review_note: payload.review_note
-          }
+            review_note: payload.review_note,
+          },
         });
 
         return {
-          registration_status: rejected.status
+          registration_status: rejected.status,
         };
       }
 
       Logger.info("ReviewRegistration: Approving registration", {
         registration_id: registrationId,
-        reviewed_by: payload.approved_by
+        reviewed_by: payload.approved_by,
       });
 
       const appUser = await prisma.$transaction(async (tx) => {
@@ -419,8 +419,8 @@ export class AuthService {
             status: "APPROVED",
             reviewed_by: payload.approved_by,
             reviewed_at: new Date(),
-            review_note: payload.review_note
-          }
+            review_note: payload.review_note,
+          },
         });
 
         return tx.app_user.create({
@@ -434,25 +434,25 @@ export class AuthService {
             role_id: payload.role_id,
             site_id: payload.site_id,
             corporation_id: payload.corporation_id,
-            status: true
-          }
+            status: true,
+          },
         });
       });
 
       Logger.info("ReviewRegistration: User approved and app_user created", {
         registration_id: registrationId,
-        app_user_id: appUser.id
+        app_user_id: appUser.id,
       });
 
       return {
         registration_status: "APPROVED",
-        app_user_id: appUser.id
+        app_user_id: appUser.id,
       };
     } catch (err: unknown) {
       const error = err instanceof Error ? err : new Error(String(err));
       Logger.error("ReviewRegistration: Failed to review registration", error, {
         registration_id: registrationId,
-        action: payload.action
+        action: payload.action,
       });
       throw error;
     }
@@ -462,38 +462,74 @@ export class AuthService {
     | {
         challenge_required: false;
         tokens: ReturnType<typeof toPublicTokens>;
+        user: {
+          id: number;
+          username: string;
+          email?: string | null;
+          first_name?: string | null;
+          last_name?: string | null;
+          phone?: string | null;
+          role_id?: number | null;
+          site_id?: number | null;
+          corporation_id?: number | null;
+          status: boolean;
+        } | null;
       }
     | {
         challenge_required: true;
         challenge_name: string;
         session: string;
+        user: {
+          id: number;
+          username: string;
+          email?: string | null;
+          first_name?: string | null;
+          last_name?: string | null;
+          phone?: string | null;
+          role_id?: number | null;
+          site_id?: number | null;
+          corporation_id?: number | null;
+          status: boolean;
+        } | null;
       }
   > {
     try {
       Logger.debug("InitiateLogin: Checking user status", {
-        username: payload.username
+        username: payload.username,
       });
 
       const user = await prisma.app_user.findUnique({
-        where: { username: payload.username }
+        where: { username: payload.username },
+        select: {
+          id: true,
+          username: true,
+          email: true,
+          first_name: true,
+          last_name: true,
+          phone: true,
+          role_id: true,
+          site_id: true,
+          corporation_id: true,
+          status: true,
+        },
       });
 
       if (!user || user.status !== true) {
         Logger.warn("InitiateLogin: User not approved or not active", {
           username: payload.username,
           user_exists: !!user,
-          user_status: user?.status
+          user_status: user?.status,
         });
 
         throw new AppError(
           StatusCodes.FORBIDDEN,
           "UserNotApproved",
-          "User is not approved for login."
+          "User is not approved for login.",
         );
       }
 
       Logger.debug("InitiateLogin: Initiating Cognito auth", {
-        username: payload.username
+        username: payload.username,
       });
 
       const response = await cognitoClient.send(
@@ -503,55 +539,87 @@ export class AuthService {
           UserPoolId: COGNITO_USER_POOL_ID,
           AuthParameters: {
             USERNAME: payload.username,
-            PASSWORD: payload.password
-          }
-        })
+            PASSWORD: payload.password,
+          },
+        }),
       );
 
       if (response.ChallengeName && response.Session) {
         Logger.info("InitiateLogin: MFA challenge required", {
           username: payload.username,
-          challenge_name: response.ChallengeName
+          challenge_name: response.ChallengeName,
         });
 
         return {
           challenge_required: true,
           challenge_name: response.ChallengeName,
-          session: response.Session
+          session: response.Session,
+          user,
         };
       }
 
       Logger.info("InitiateLogin: Login successful without MFA", {
-        username: payload.username
+        username: payload.username,
       });
 
       return {
         challenge_required: false,
-        tokens: toPublicTokens(response.AuthenticationResult)
+        tokens: toPublicTokens(response.AuthenticationResult),
+        user,
       };
     } catch (err: unknown) {
-      const error = err instanceof Error ? err : new Error(String(err));
+      const error: any = err instanceof Error ? err : new Error(String(err));
+      let orginalError = error;
       const errorName = getCognitoErrorName(err);
       Logger.error("InitiateLogin: Login failed", error, {
         username: payload.username,
-        error_name: errorName
+        error_name: errorName,
       });
 
-      if (errorName) {
+      if (errorName && errorName !== "Error") {
         throwLoginError(errorName);
+      } else if (orginalError.statusCode === 403) {
+        throw new AppError(
+          StatusCodes.FORBIDDEN,
+          "UserNotFoundOrNotApproved",
+          "User is not found or not approved for login.",
+        );
       }
 
-      throw error;
+      Logger.error("InitiateLogin: Unknown Cognito error", error, {
+        username: payload.username,
+        error_name: errorName,
+      });
+
+      throw new AppError(
+        StatusCodes.UNAUTHORIZED,
+        "AuthenticationFailed",
+        "Authentication failed. Please verify your credentials and try again.",
+      );
     }
   }
 
-  public static async respondToChallenge(payload: LoginRespondPayload): Promise<{
+  public static async respondToChallenge(
+    payload: LoginRespondPayload,
+  ): Promise<{
     tokens: ReturnType<typeof toPublicTokens>;
+    user: {
+      id: number;
+      username: string;
+      email?: string | null;
+      first_name?: string | null;
+      last_name?: string | null;
+      phone?: string | null;
+      role_id?: number | null;
+      site_id?: number | null;
+      corporation_id?: number | null;
+      status: boolean;
+    } | null;
   }> {
     try {
       Logger.debug("RespondToChallenge: Processing challenge response", {
         username: payload.username,
-        challenge_name: payload.challenge_name
+        challenge_name: payload.challenge_name,
       });
 
       const challengeKey = mapChallengeCodeKey(payload.challenge_name);
@@ -564,27 +632,48 @@ export class AuthService {
           Session: payload.session,
           ChallengeResponses: {
             USERNAME: payload.username,
-            [challengeKey]: payload.challenge_code
-          }
-        })
+            [challengeKey]: payload.challenge_code,
+          },
+        }),
       );
+
+      const user = await prisma.app_user.findUnique({
+        where: { username: payload.username },
+        select: {
+          id: true,
+          username: true,
+          email: true,
+          first_name: true,
+          last_name: true,
+          phone: true,
+          role_id: true,
+          site_id: true,
+          corporation_id: true,
+          status: true,
+        },
+      });
 
       Logger.info("RespondToChallenge: Challenge response successful", {
         username: payload.username,
-        challenge_name: payload.challenge_name
+        challenge_name: payload.challenge_name,
       });
 
       return {
-        tokens: toPublicTokens(response.AuthenticationResult)
+        tokens: toPublicTokens(response.AuthenticationResult),
+        user: user || null,
       };
     } catch (err: unknown) {
       const error = err instanceof Error ? err : new Error(String(err));
       const errorName = getCognitoErrorName(err);
-      Logger.error("RespondToChallenge: Failed to respond to challenge", error, {
-        username: payload.username,
-        challenge_name: payload.challenge_name,
-        error_name: errorName
-      });
+      Logger.error(
+        "RespondToChallenge: Failed to respond to challenge",
+        error,
+        {
+          username: payload.username,
+          challenge_name: payload.challenge_name,
+          error_name: errorName,
+        },
+      );
 
       if (errorName) {
         throwLoginError(errorName);
@@ -600,40 +689,44 @@ export class AuthService {
   }> {
     try {
       Logger.debug("ForgotPassword: Initiating forgot password", {
-        username: payload.username
+        username: payload.username,
       });
 
       const response = await cognitoClient.send(
         new ForgotPasswordCommand({
           ClientId: COGNITO_CLIENT_ID,
-          Username: payload.username
-        })
+          Username: payload.username,
+        }),
       );
 
       Logger.info("ForgotPassword: Password reset code sent", {
         username: payload.username,
-        delivery_medium: response.CodeDeliveryDetails?.DeliveryMedium
+        delivery_medium: response.CodeDeliveryDetails?.DeliveryMedium,
       });
 
       return {
         destination: response.CodeDeliveryDetails?.Destination,
-        delivery_medium: response.CodeDeliveryDetails?.DeliveryMedium
+        delivery_medium: response.CodeDeliveryDetails?.DeliveryMedium,
       };
     } catch (err: unknown) {
       const error = err instanceof Error ? err : new Error(String(err));
-      Logger.error("ForgotPassword: Failed to initiate forgot password", error, {
-        username: payload.username
-      });
+      Logger.error(
+        "ForgotPassword: Failed to initiate forgot password",
+        error,
+        {
+          username: payload.username,
+        },
+      );
       throw error;
     }
   }
 
   public static async confirmForgotPassword(
-    payload: ConfirmForgotPasswordPayload
+    payload: ConfirmForgotPasswordPayload,
   ): Promise<void> {
     try {
       Logger.debug("ConfirmForgotPassword: Confirming forgot password", {
-        username: payload.username
+        username: payload.username,
       });
 
       await cognitoClient.send(
@@ -641,18 +734,22 @@ export class AuthService {
           ClientId: COGNITO_CLIENT_ID,
           Username: payload.username,
           ConfirmationCode: payload.confirmation_code,
-          Password: payload.new_password
-        })
+          Password: payload.new_password,
+        }),
       );
 
       Logger.info("ConfirmForgotPassword: Password reset confirmed", {
-        username: payload.username
+        username: payload.username,
       });
     } catch (err: unknown) {
       const error = err instanceof Error ? err : new Error(String(err));
-      Logger.error("ConfirmForgotPassword: Failed to confirm forgot password", error, {
-        username: payload.username
-      });
+      Logger.error(
+        "ConfirmForgotPassword: Failed to confirm forgot password",
+        error,
+        {
+          username: payload.username,
+        },
+      );
       throw error;
     }
   }
