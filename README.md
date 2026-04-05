@@ -299,4 +299,86 @@ COGNITO_USER_POOL_ID=ap-south-1_IpHuY1R4r
 COGNITO_CLIENT_ID=4gan91cej5fd3carar5ispnoit
 DATABASE_URL=mysql://...
 PORT=4100
+AUTH_MS_JWT_EXPIRES_IN_SEC=3600
+AUTH_MS_JWT_ACTIVE_KID=authms-rs-2026-04
+AUTH_MS_JWT_KEYS_JSON=[{"kid":"authms-rs-2026-04","alg":"RS256","privateKeyPem":"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----","publicJwk":{"kty":"RSA","n":"...","e":"AQAB"},"enabled":true}]
 ```
+
+## JWKS endpoint
+
+Public signing keys are exposed at:
+
+```http
+GET /jwks.json
+```
+
+Response format:
+
+```json
+{
+  "keys": [
+    {
+      "kty": "RSA",
+      "kid": "authms-rs-2026-04",
+      "alg": "RS256",
+      "use": "sig",
+      "n": "...",
+      "e": "AQAB"
+    }
+  ]
+}
+```
+
+## Key rotation
+
+1. Add new key object to `AUTH_MS_JWT_KEYS_JSON` with `enabled=true`.
+2. Keep old key(s) enabled so existing tokens continue verifying.
+3. Set `AUTH_MS_JWT_ACTIVE_KID` to the new `kid` to start signing with it.
+4. After old tokens expire, disable/remove old keys.
+
+## Legacy API JWKS fetch/cache guidance
+
+1. Fetch `GET /jwks.json` at startup and cache by `kid`.
+2. Verify incoming auth-ms JWT using `alg`, `kid`, and matching JWK.
+3. Cache TTL recommendation: 5-15 minutes, with background refresh.
+4. On unknown `kid`, force an immediate JWKS refresh once, then retry verify.
+5. Do not hardcode one key; always support multiple active keys during rotation.
+
+## Observability Metrics And Dashboard Suggestions
+
+Structured metric logs are emitted as `AUTH_METRIC` with these counters:
+
+- `auth_verification_success_total`
+  - labels: `auth_source`, plus `token_use` (Cognito side) or `reason=verified` (legacy side)
+- `auth_verification_failure_total`
+  - labels: `auth_source`, `reason`
+- `user_auth_bridge_upsert_total`
+  - labels: `auth_source`, `provider` (and `outcome` in legacy service helper)
+- `shadow_legacy_user_created_total`
+  - labels: `auth_source`, `provider`
+
+Suggested dashboard panels:
+
+1. Auth Success Rate By Source
+   - `sum(auth_verification_success_total{auth_source="cognito"})`
+   - `sum(auth_verification_success_total{auth_source="auth-ms"})`
+   - `sum(auth_verification_success_total{auth_source="legacy"})`
+2. Verification Failures By Reason
+   - Breakdown of `auth_verification_failure_total` grouped by `auth_source, reason`
+3. Bridge Upsert Throughput
+   - `sum(user_auth_bridge_upsert_total)` grouped by `outcome` where available
+4. Shadow Legacy User Creation Trend
+   - `sum(shadow_legacy_user_created_total)` over time
+5. Failure Ratio
+   - `sum(auth_verification_failure_total) / (sum(auth_verification_success_total) + sum(auth_verification_failure_total))`
+
+Suggested alerts:
+
+1. High Auth Failure Ratio
+   - Trigger if failure ratio exceeds baseline (for example >5%) for 5-10 minutes.
+2. Sudden `kid_not_found` Or `jwks_fetch_failed`
+   - Trigger immediately; indicates JWKS rotation/cache/connectivity issues.
+3. Unexpected Spike In `shadow_legacy_user_created_total`
+   - Trigger if creations exceed expected onboarding baseline.
+4. Bridge Upsert Failures
+   - Trigger on non-zero `user_auth_bridge_upsert_total{outcome="failed"}`.

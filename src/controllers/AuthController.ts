@@ -1,7 +1,8 @@
 import { Request, Response } from "express";
-import { StatusCodes } from "http-status-codes";
 
+import { AuthenticatedRequest } from "../middlewares/AuthorizationMiddleware";
 import { AuthService } from "../services/AuthService";
+import { AppError } from "../utils/AppError";
 import { ApiResponse } from "../utils/ApiResponse";
 import { Logger } from "../utils/Logger";
 import {
@@ -134,6 +135,16 @@ export class AuthController {
     Logger.info("Password reset successful", { username: payload.username });
 
     ApiResponse.ok(res, "Password reset successful.", null);
+  }
+
+  public static async exchangeToken(req: AuthenticatedRequest, res: Response): Promise<void> {
+    const auth = req.auth;
+    if (!auth) {
+      throw new AppError(401, "UNAUTHORIZED", "Authentication context missing.");
+    }
+
+    const data = await AuthService.exchangeAccessToken(auth);
+    res.status(200).json(data);
   }
 
 }

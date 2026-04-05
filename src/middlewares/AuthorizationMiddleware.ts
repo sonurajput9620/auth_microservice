@@ -1,11 +1,17 @@
 import { NextFunction, Request, Response } from "express";
 import { StatusCodes } from "http-status-codes";
+import { CognitoJwtVerifier } from "aws-jwt-verify";
+import { CognitoJwtPayload } from "aws-jwt-verify/jwt-model";
 
+import { authJwtConfig, CognitoTokenUse } from "../config/AuthJwtConfig";
 import { AppError } from "../utils/AppError";
+import { Logger } from "../utils/Logger";
 
 export interface AuthContext {
   sub?: string;
   username?: string;
+  tokenUse?: "access" | "id";
+  clientId?: string;
   role?: string;
   groups: string[];
   permissions: string[];
@@ -15,6 +21,41 @@ export interface AuthenticatedRequest extends Request {
   auth?: AuthContext;
 }
 
+const authMetricCounters = new Map<string, number>();
+
+const incrementAuthMetric = (
+  metric: string,
+  labels: Record<string, string>,
+): number => {
+  const key = `${metric}|${JSON.stringify(labels)}`;
+  const nextValue = (authMetricCounters.get(key) || 0) + 1;
+  authMetricCounters.set(key, nextValue);
+  Logger.info("AUTH_METRIC", {
+    metric,
+    value: nextValue,
+    ...labels,
+  });
+  return nextValue;
+};
+
+const recordVerificationFailure = (reason: string): void => {
+  incrementAuthMetric("auth_verification_failure_total", {
+    auth_source: "cognito",
+    reason,
+  });
+  Logger.warn("Cognito token verification failed", {
+    auth_source: "cognito",
+    reason,
+  });
+};
+
+const recordVerificationSuccess = (tokenUse: string): void => {
+  incrementAuthMetric("auth_verification_success_total", {
+    auth_source: "cognito",
+    token_use: tokenUse,
+  });
+};
+
 const decodeBase64Url = (value: string): string => {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
   const pad = normalized.length % 4;
@@ -22,22 +63,7 @@ const decodeBase64Url = (value: string): string => {
   return Buffer.from(padded, "base64").toString("utf-8");
 };
 
-const toStringArray = (value: unknown): string[] => {
-  if (Array.isArray(value)) {
-    return value.map((item) => String(item).trim()).filter(Boolean);
-  }
-
-  if (typeof value === "string") {
-    return value
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean);
-  }
-
-  return [];
-};
-
-const parseTokenPayload = (token: string): Record<string, unknown> => {
+const parseBearerTokenPayloadUnsafe = (token: string): Record<string, unknown> => {
   const parts = token.split(".");
   if (parts.length < 2) {
     throw new AppError(
@@ -56,6 +82,21 @@ const parseTokenPayload = (token: string): Record<string, unknown> => {
       "Invalid bearer token payload."
     );
   }
+};
+
+const toStringArray = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean);
+  }
+
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  return [];
 };
 
 const buildAuthContext = (payload: Record<string, unknown>): AuthContext => {
@@ -78,9 +119,111 @@ const buildAuthContext = (payload: Record<string, unknown>): AuthContext => {
         : typeof payload.role === "string"
           ? String(payload.role)
           : undefined,
+    tokenUse:
+      payload.token_use === "access" || payload.token_use === "id"
+        ? payload.token_use
+        : undefined,
+    clientId:
+      typeof payload.client_id === "string"
+        ? payload.client_id
+        : typeof payload.aud === "string"
+          ? payload.aud
+          : undefined,
     groups,
     permissions
   };
+};
+
+const tokenUseVerifiers = authJwtConfig.allowedTokenUse.reduce<
+  Partial<Record<CognitoTokenUse, ReturnType<typeof CognitoJwtVerifier.create>>>
+>((acc, tokenUse) => {
+  acc[tokenUse] = CognitoJwtVerifier.create({
+    userPoolId: authJwtConfig.userPoolId,
+    tokenUse,
+    clientId: authJwtConfig.audience
+  });
+  return acc;
+}, {});
+
+const verifyCognitoJwt = async (token: string): Promise<CognitoJwtPayload> => {
+  const unsafePayload = parseBearerTokenPayloadUnsafe(token);
+  const tokenUse = String(unsafePayload.token_use ?? "").toLowerCase() as CognitoTokenUse;
+
+  if (tokenUse !== "access" && tokenUse !== "id") {
+    recordVerificationFailure("invalid_token_use_claim");
+    throw new AppError(
+      StatusCodes.UNAUTHORIZED,
+      "UNAUTHORIZED",
+      "Invalid token_use claim."
+    );
+  }
+
+  if (!authJwtConfig.allowedTokenUse.includes(tokenUse)) {
+    recordVerificationFailure("token_use_not_allowed");
+    throw new AppError(
+      StatusCodes.UNAUTHORIZED,
+      "UNAUTHORIZED",
+      `token_use ${tokenUse} is not allowed for this API.`
+    );
+  }
+
+  const verifier = tokenUseVerifiers[tokenUse];
+  if (!verifier) {
+    recordVerificationFailure("verifier_not_configured");
+    throw new AppError(
+      StatusCodes.INTERNAL_SERVER_ERROR,
+      "ConfigError",
+      `Verifier not configured for token_use ${tokenUse}.`
+    );
+  }
+
+  try {
+    const verifiedPayload = await verifier.verify(token);
+
+    if (verifiedPayload.iss !== authJwtConfig.issuer) {
+      recordVerificationFailure("invalid_issuer");
+      throw new AppError(
+        StatusCodes.UNAUTHORIZED,
+        "UNAUTHORIZED",
+        "Invalid issuer claim."
+      );
+    }
+
+    if (
+      typeof verifiedPayload.exp !== "number" ||
+      verifiedPayload.exp <= Math.floor(Date.now() / 1000)
+    ) {
+      recordVerificationFailure("token_expired");
+      throw new AppError(
+        StatusCodes.UNAUTHORIZED,
+        "UNAUTHORIZED",
+        "Token is expired."
+      );
+    }
+
+    if (verifiedPayload.token_use !== tokenUse) {
+      recordVerificationFailure("token_use_mismatch");
+      throw new AppError(
+        StatusCodes.UNAUTHORIZED,
+        "UNAUTHORIZED",
+        "token_use claim mismatch."
+      );
+    }
+
+    recordVerificationSuccess(tokenUse);
+    return verifiedPayload;
+  } catch (error: unknown) {
+    if (error instanceof AppError) {
+      throw error;
+    }
+
+    recordVerificationFailure("signature_or_claims_verification_failed");
+    throw new AppError(
+      StatusCodes.UNAUTHORIZED,
+      "UNAUTHORIZED",
+      "Token verification failed."
+    );
+  }
 };
 
 const isAuthDisabled = (): boolean => {
@@ -124,6 +267,7 @@ export const RequireAuth = (
 
   const authorization = req.header("authorization") ?? "";
   if (!authorization.toLowerCase().startsWith("bearer ")) {
+    recordVerificationFailure("missing_or_invalid_authorization_header");
     next(
       new AppError(
         StatusCodes.UNAUTHORIZED,
@@ -136,13 +280,19 @@ export const RequireAuth = (
 
   const token = authorization.slice(7).trim();
   if (!token) {
+    recordVerificationFailure("empty_bearer_token");
     next(new AppError(StatusCodes.UNAUTHORIZED, "UNAUTHORIZED", "Bearer token is empty."));
     return;
   }
 
-  const payload = parseTokenPayload(token);
-  req.auth = buildAuthContext(payload);
-  next();
+  void verifyCognitoJwt(token)
+    .then((payload) => {
+      req.auth = buildAuthContext(payload as unknown as Record<string, unknown>);
+      next();
+    })
+    .catch((error: unknown) => {
+      next(error as Error);
+    });
 };
 
 export const RequireAdmin = (

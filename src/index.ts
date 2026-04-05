@@ -1,10 +1,8 @@
-import dotenv from "dotenv";
+import "dotenv/config";
 
 import { createApp } from "./app";
 import { connectDB, disconnectDB } from "./prismaClient";
 import { Logger } from "./utils/Logger";
-
-dotenv.config();
 
 const app = createApp();
 const port: number = Number(process.env.PORT) || 4100;

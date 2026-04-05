@@ -8,8 +8,13 @@ import {
   ForgotPasswordCommand,
   SignUpCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
+import { Prisma } from "@prisma/client";
 import { StatusCodes } from "http-status-codes";
+import jwt from "jsonwebtoken";
+import { randomUUID } from "crypto";
 
+import { authMsJwtConfig } from "../config/AuthMsJwtConfig";
+import { AuthContext } from "../middlewares/AuthorizationMiddleware";
 import { prisma } from "../prismaClient";
 import { AppError } from "../utils/AppError";
 import { Logger } from "../utils/Logger";
@@ -22,7 +27,6 @@ import {
   LoginRespondPayload,
   SignUpPayload,
 } from "../validations/AuthValidation";
-import e from "cors";
 
 const getEnv = (key: string): string => {
   const value = process.env[key];
@@ -39,9 +43,69 @@ const getEnv = (key: string): string => {
 const COGNITO_CLIENT_ID = getEnv("COGNITO_CLIENT_ID");
 const COGNITO_USER_POOL_ID = getEnv("COGNITO_USER_POOL_ID");
 const AWS_REGION = getEnv("AWS_DEFAULT_REGION");
+const AUTH_SYNC_EMAIL_FROM_COGNITO = process.env.AUTH_SYNC_EMAIL_FROM_COGNITO !== "false";
 const cognitoClient = new CognitoIdentityProviderClient({
   region: AWS_REGION,
 });
+
+const appUserSelect = {
+  id: true,
+  username: true,
+  email: true,
+  first_name: true,
+  last_name: true,
+  phone: true,
+  role_id: true,
+  site_id: true,
+  corporation_id: true,
+  status: true,
+} as const;
+
+type PublicAppUser = {
+  id: number;
+  username: string;
+  email?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  phone?: string | null;
+  role_id?: number | null;
+  site_id?: number | null;
+  corporation_id?: number | null;
+  status: boolean;
+};
+
+type CognitoIdentity = {
+  sub: string;
+  username: string;
+  email: string | null;
+  emailVerified: boolean | null;
+  firstName: string | null;
+  lastName: string | null;
+  phone: string | null;
+};
+
+type AuthMsTokenExchangePayload = {
+  access_token: string;
+  token_type: "Bearer";
+  expires_in: number;
+};
+
+const authMetricCounters = new Map<string, number>();
+
+const incrementAuthMetric = (
+  metric: string,
+  labels: Record<string, string>,
+): number => {
+  const key = `${metric}|${JSON.stringify(labels)}`;
+  const nextValue = (authMetricCounters.get(key) || 0) + 1;
+  authMetricCounters.set(key, nextValue);
+  Logger.info("AUTH_METRIC", {
+    metric,
+    value: nextValue,
+    ...labels,
+  });
+  return nextValue;
+};
 
 const normalizePhone = (phone: string): string => {
   if (phone.startsWith("+")) {
@@ -109,6 +173,404 @@ const toPublicTokens = (result?: {
 
 const getCognitoErrorName = (err: unknown): string | undefined =>
   (err as { name?: string })?.name;
+
+const decodeJwtPayload = (jwtToken: string): Record<string, unknown> => {
+  const parts = jwtToken.split(".");
+  if (parts.length < 2) {
+    throw new AppError(
+      StatusCodes.UNAUTHORIZED,
+      "AuthenticationFailed",
+      "Invalid Cognito id token format.",
+    );
+  }
+
+  try {
+    const normalized = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded =
+      normalized.length % 4 === 0 ? normalized : normalized + "=".repeat(4 - (normalized.length % 4));
+    return JSON.parse(Buffer.from(padded, "base64").toString("utf-8")) as Record<string, unknown>;
+  } catch {
+    throw new AppError(
+      StatusCodes.UNAUTHORIZED,
+      "AuthenticationFailed",
+      "Unable to decode Cognito id token payload.",
+    );
+  }
+};
+
+const toNullableString = (value: unknown): string | null =>
+  typeof value === "string" && value.trim() ? value.trim() : null;
+
+const toNullableBoolean = (value: unknown): boolean | null => {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+  return null;
+};
+
+const extractIdentityFromIdToken = (
+  idToken: string,
+  fallbackUsername: string,
+): CognitoIdentity => {
+  const payload = decodeJwtPayload(idToken);
+  const sub = toNullableString(payload.sub);
+
+  if (!sub) {
+    throw new AppError(
+      StatusCodes.UNAUTHORIZED,
+      "AuthenticationFailed",
+      "Missing sub in Cognito id token.",
+    );
+  }
+
+  const username =
+    toNullableString(payload.preferred_username) ||
+    toNullableString(payload["cognito:username"]) ||
+    toNullableString(payload.username) ||
+    fallbackUsername;
+
+  return {
+    sub,
+    username,
+    email: toNullableString(payload.email),
+    emailVerified: toNullableBoolean(payload.email_verified),
+    firstName: toNullableString(payload.given_name),
+    lastName: toNullableString(payload.family_name),
+    phone: toNullableString(payload.phone_number),
+  };
+};
+
+const syncUserByCognitoSubInTx = async (
+  tx: Prisma.TransactionClient,
+  identity: CognitoIdentity,
+): Promise<PublicAppUser> => {
+  let registration = await tx.register_user.findFirst({
+    where: {
+      OR: [{ cognito_sub: identity.sub }, { username: identity.username }],
+    },
+  });
+
+  if (!registration && identity.email) {
+    registration = await tx.register_user.findUnique({
+      where: { email: identity.email },
+    });
+  }
+
+  if (!registration) {
+    registration = await tx.register_user.create({
+      data: {
+        cognito_sub: identity.sub,
+        username: identity.username,
+        first_name: identity.firstName,
+        last_name: identity.lastName,
+        email: identity.email,
+        phone: identity.phone,
+        email_verified: identity.emailVerified ?? false,
+        status: "APPROVED",
+      },
+    });
+  } else {
+    const registrationUpdate: {
+      cognito_sub?: string;
+      email?: string | null;
+      email_verified?: boolean;
+    } = {};
+
+    if (registration.cognito_sub !== identity.sub) {
+      registrationUpdate.cognito_sub = identity.sub;
+    }
+
+    if (AUTH_SYNC_EMAIL_FROM_COGNITO && identity.email && registration.email !== identity.email) {
+      registrationUpdate.email = identity.email;
+    }
+
+    if (
+      AUTH_SYNC_EMAIL_FROM_COGNITO &&
+      identity.emailVerified !== null &&
+      registration.email_verified !== identity.emailVerified
+    ) {
+      registrationUpdate.email_verified = identity.emailVerified;
+    }
+
+    if (Object.keys(registrationUpdate).length > 0) {
+      registration = await tx.register_user.update({
+        where: { id: registration.id },
+        data: registrationUpdate,
+      });
+    }
+  }
+
+  let appUser = await tx.app_user.findFirst({
+    where: {
+      OR: [{ cognito_sub: identity.sub }, { register_user_id: registration.id }],
+    },
+    select: appUserSelect,
+  });
+
+  if (!appUser) {
+    appUser = await tx.app_user.findUnique({
+      where: { username: identity.username },
+      select: appUserSelect,
+    });
+  }
+
+  if (!appUser) {
+    appUser = await tx.app_user.create({
+      data: {
+        register_user_id: registration.id,
+        cognito_sub: identity.sub,
+        username: identity.username,
+        first_name: registration.first_name,
+        last_name: registration.last_name,
+        email: registration.email,
+        phone: registration.phone,
+        status: true,
+      },
+      select: appUserSelect,
+    });
+  } else {
+    const appUserUpdate: {
+      cognito_sub?: string;
+      email?: string | null;
+    } = {};
+
+    if ((appUser as { cognito_sub?: string | null }).cognito_sub !== identity.sub) {
+      appUserUpdate.cognito_sub = identity.sub;
+    }
+
+    if (AUTH_SYNC_EMAIL_FROM_COGNITO && identity.email && appUser.email !== identity.email) {
+      appUserUpdate.email = identity.email;
+    }
+
+    if (Object.keys(appUserUpdate).length > 0) {
+      appUser = await tx.app_user.update({
+        where: { id: appUser.id },
+        data: appUserUpdate,
+        select: appUserSelect,
+      });
+    }
+  }
+
+  return appUser;
+};
+
+const syncUserByCognitoSub = async (
+  identity: CognitoIdentity,
+): Promise<PublicAppUser> => {
+  return prisma.$transaction(async (tx) => {
+    return syncUserByCognitoSubInTx(tx, identity);
+  });
+};
+
+const getLegacyUsername = (identity: Pick<CognitoIdentity, "username" | "sub">): string => {
+  const base = (identity.username || "").trim() || `cognito_${identity.sub}`;
+  return base.length > 300 ? base.slice(0, 300) : base;
+};
+
+const getLegacyEmail = (identity: Pick<CognitoIdentity, "email" | "sub">): string => {
+  const fallback = `cognito_${identity.sub}@local.invalid`;
+  const candidate = (identity.email || "").trim() || fallback;
+  return candidate.length > 300 ? candidate.slice(0, 300) : candidate;
+};
+
+const ensureLegacyUserForIdentity = async (
+  tx: Prisma.TransactionClient,
+  identity: Pick<CognitoIdentity, "username" | "email" | "firstName" | "lastName" | "sub">,
+): Promise<number> => {
+  const legacyUsername = getLegacyUsername(identity);
+
+  const existingByUsername = await tx.tbl_users.findFirst({
+    where: {
+      username: legacyUsername,
+      provider: "cognito",
+    },
+    orderBy: { user_id: "asc" },
+  });
+
+  if (existingByUsername) {
+    return existingByUsername.user_id;
+  }
+
+  const created = await tx.tbl_users.create({
+    data: {
+      username: legacyUsername,
+      email: getLegacyEmail(identity),
+      password: `!cognito-managed!${identity.sub}`,
+      first_name: (identity.firstName || "Cognito").slice(0, 100),
+      last_name: (identity.lastName || "User").slice(0, 100),
+      lab_type: 0,
+      dob: new Date("1970-01-01"),
+      provider: "cognito",
+      created_date: new Date(),
+      status: true,
+    },
+  });
+
+  incrementAuthMetric("shadow_legacy_user_created_total", {
+    auth_source: "cognito",
+    provider: "cognito",
+  });
+  Logger.info("Shadow legacy user created", {
+    auth_source: "cognito",
+    provider: "cognito",
+    cognito_sub: identity.sub,
+    legacy_user_id: created.user_id,
+    username: created.username,
+  });
+
+  return created.user_id;
+};
+
+const lockAndEnsureBridge = async (
+  tx: Prisma.TransactionClient,
+  cognitoSub: string,
+): Promise<{ id: bigint; app_user_id: number | null; legacy_user_id: number | null }> => {
+  await tx.$executeRaw`
+    INSERT INTO user_auth_bridge (
+      provider,
+      provider_subject,
+      cognito_sub,
+      created_at,
+      updated_at
+    )
+    VALUES (
+      'cognito',
+      ${cognitoSub},
+      ${cognitoSub},
+      NOW(),
+      NOW()
+    )
+    ON DUPLICATE KEY UPDATE
+      provider_subject = VALUES(provider_subject),
+      cognito_sub = VALUES(cognito_sub),
+      updated_at = NOW()
+  `;
+
+  const rows = await tx.$queryRaw<
+    Array<{ id: bigint; app_user_id: number | null; legacy_user_id: number | null }>
+  >`
+    SELECT id, app_user_id, legacy_user_id
+    FROM user_auth_bridge
+    WHERE cognito_sub = ${cognitoSub}
+    LIMIT 1
+    FOR UPDATE
+  `;
+
+  if (!rows.length) {
+    throw new AppError(
+      StatusCodes.INTERNAL_SERVER_ERROR,
+      "BridgeResolutionFailed",
+      "Failed to resolve user_auth_bridge row.",
+    );
+  }
+
+  incrementAuthMetric("user_auth_bridge_upsert_total", {
+    auth_source: "cognito",
+    provider: "cognito",
+  });
+  Logger.info("User auth bridge upserted", {
+    auth_source: "cognito",
+    provider: "cognito",
+    cognito_sub: cognitoSub,
+    bridge_id: String(rows[0].id),
+    has_app_user_id: rows[0].app_user_id !== null,
+    has_legacy_user_id: rows[0].legacy_user_id !== null,
+  });
+
+  return rows[0];
+};
+
+const ensureUserGraphFromAccessToken = async (
+  auth: AuthContext,
+): Promise<{ appUserId: number; legacyUserId: number }> => {
+  const cognitoSub = toNullableString(auth.sub);
+  const username = toNullableString(auth.username);
+
+  if (!cognitoSub) {
+    throw new AppError(
+      StatusCodes.UNAUTHORIZED,
+      "AuthenticationFailed",
+      "Missing Cognito subject claim.",
+    );
+  }
+
+  if (!username) {
+    throw new AppError(
+      StatusCodes.UNAUTHORIZED,
+      "AuthenticationFailed",
+      "Missing Cognito username claim.",
+    );
+  }
+
+  const identity: CognitoIdentity = {
+    sub: cognitoSub,
+    username,
+    email: null,
+    emailVerified: null,
+    firstName: null,
+    lastName: null,
+    phone: null,
+  };
+
+  return prisma.$transaction(async (tx) => {
+    const bridge = await lockAndEnsureBridge(tx, cognitoSub);
+    const syncedAppUser = await syncUserByCognitoSubInTx(tx, identity);
+
+    const appUserId = bridge.app_user_id || syncedAppUser.id;
+    const legacyUserId =
+      bridge.legacy_user_id || (await ensureLegacyUserForIdentity(tx, identity));
+
+    await tx.$executeRaw`
+      UPDATE user_auth_bridge
+      SET app_user_id = ${appUserId},
+          legacy_user_id = ${legacyUserId},
+          updated_at = NOW()
+      WHERE id = ${bridge.id}
+    `;
+
+    return {
+      appUserId,
+      legacyUserId,
+    };
+  });
+};
+
+const signAuthMsAccessToken = (claims: {
+  appUserId: number;
+  legacyUserId: number;
+}): AuthMsTokenExchangePayload => {
+  const jti = randomUUID();
+  const expiresIn = authMsJwtConfig.expiresInSec;
+  const { signingKey } = authMsJwtConfig;
+
+  const accessToken = jwt.sign(
+    {
+      app_user_id: claims.appUserId,
+      legacy_user_id: claims.legacyUserId,
+      auth_source: "auth_microservice",
+    },
+    signingKey.privateKeyPem,
+    {
+      algorithm: signingKey.alg,
+      expiresIn,
+      jwtid: jti,
+      keyid: signingKey.kid,
+      issuer: authMsJwtConfig.issuer,
+      audience: authMsJwtConfig.audience,
+    },
+  );
+
+  return {
+    access_token: accessToken,
+    token_type: "Bearer",
+    expires_in: expiresIn,
+  };
+};
 
 const throwLoginError = (errorName: string | undefined): never => {
   if (errorName === "NotAuthorizedException") {
@@ -494,31 +956,20 @@ export class AuthService {
       }
   > {
     try {
-      Logger.debug("InitiateLogin: Checking user status", {
+      Logger.debug("InitiateLogin: Checking existing app_user status", {
         username: payload.username,
       });
 
-      const user = await prisma.app_user.findUnique({
+      const existingUser = await prisma.app_user.findUnique({
         where: { username: payload.username },
-        select: {
-          id: true,
-          username: true,
-          email: true,
-          first_name: true,
-          last_name: true,
-          phone: true,
-          role_id: true,
-          site_id: true,
-          corporation_id: true,
-          status: true,
-        },
+        select: appUserSelect,
       });
 
-      if (!user || user.status !== true) {
+      if (existingUser && existingUser.status !== true) {
         Logger.warn("InitiateLogin: User not approved or not active", {
           username: payload.username,
-          user_exists: !!user,
-          user_status: user?.status,
+          user_exists: !!existingUser,
+          user_status: existingUser?.status,
         });
 
         throw new AppError(
@@ -554,7 +1005,7 @@ export class AuthService {
           challenge_required: true,
           challenge_name: response.ChallengeName,
           session: response.Session,
-          user,
+          user: existingUser || null,
         };
       }
 
@@ -562,9 +1013,21 @@ export class AuthService {
         username: payload.username,
       });
 
+      const tokens = toPublicTokens(response.AuthenticationResult);
+      const identity = extractIdentityFromIdToken(tokens.id_token, payload.username);
+      const user = await syncUserByCognitoSub(identity);
+
+      if (!user || user.status !== true) {
+        throw new AppError(
+          StatusCodes.FORBIDDEN,
+          "UserNotApproved",
+          "User is not approved for login.",
+        );
+      }
+
       return {
         challenge_required: false,
-        tokens: toPublicTokens(response.AuthenticationResult),
+        tokens,
         user,
       };
     } catch (err: unknown) {
@@ -637,21 +1100,17 @@ export class AuthService {
         }),
       );
 
-      const user = await prisma.app_user.findUnique({
-        where: { username: payload.username },
-        select: {
-          id: true,
-          username: true,
-          email: true,
-          first_name: true,
-          last_name: true,
-          phone: true,
-          role_id: true,
-          site_id: true,
-          corporation_id: true,
-          status: true,
-        },
-      });
+      const tokens = toPublicTokens(response.AuthenticationResult);
+      const identity = extractIdentityFromIdToken(tokens.id_token, payload.username);
+      const user = await syncUserByCognitoSub(identity);
+
+      if (!user || user.status !== true) {
+        throw new AppError(
+          StatusCodes.FORBIDDEN,
+          "UserNotApproved",
+          "User is not approved for login.",
+        );
+      }
 
       Logger.info("RespondToChallenge: Challenge response successful", {
         username: payload.username,
@@ -659,7 +1118,7 @@ export class AuthService {
       });
 
       return {
-        tokens: toPublicTokens(response.AuthenticationResult),
+        tokens,
         user: user || null,
       };
     } catch (err: unknown) {
@@ -681,6 +1140,34 @@ export class AuthService {
 
       throw error;
     }
+  }
+
+  public static async exchangeAccessToken(
+    auth: AuthContext,
+  ): Promise<AuthMsTokenExchangePayload> {
+    if (!auth?.sub) {
+      throw new AppError(
+        StatusCodes.UNAUTHORIZED,
+        "UNAUTHORIZED",
+        "Authentication context is missing subject.",
+      );
+    }
+
+    if (auth.tokenUse !== "access") {
+      throw new AppError(
+        StatusCodes.UNAUTHORIZED,
+        "UNAUTHORIZED",
+        "Only Cognito access tokens are allowed for token exchange.",
+      );
+    }
+
+    const mapping = await ensureUserGraphFromAccessToken(auth);
+    Logger.info("Auth token exchange resolved user graph", {
+      auth_source: "cognito_token_exchange",
+      app_user_id: mapping.appUserId,
+      legacy_user_id: mapping.legacyUserId,
+    });
+    return signAuthMsAccessToken(mapping);
   }
 
   public static async forgotPassword(payload: ForgotPasswordPayload): Promise<{
