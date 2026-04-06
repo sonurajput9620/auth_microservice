@@ -22,7 +22,6 @@ import {
   LoginRespondPayload,
   SignUpPayload,
 } from "../validations/AuthValidation";
-import e from "cors";
 
 const getEnv = (key: string): string => {
   const value = process.env[key];
@@ -158,7 +157,308 @@ const throwLoginError = (errorName: string | undefined): never => {
   );
 };
 
+type LoginSite = {
+  site_id: number;
+  site_name: string | null;
+  sitepfd: string | null;
+  apikey: string | null;
+  assistantid: string | null;
+  threadid: string | null;
+  site_description: string | null;
+  corporation_id?: number | null;
+  agent_id?: number | null;
+  source_name?: string | null;
+  changePassword?: number | null;
+};
+
+type LoginUser = {
+  id: number;
+  username: string;
+  email?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  phone?: string | null;
+  role_id?: number | null;
+  site_id?: number | null;
+  corporation_id?: number | null;
+  status: boolean;
+  allsites: LoginSite[];
+};
+
 export class AuthService {
+  private static async mapSitesByIds(siteIds: number[]): Promise<Map<number, LoginSite>> {
+    const uniqueSiteIds = Array.from(new Set(siteIds));
+    if (uniqueSiteIds.length === 0) {
+      return new Map<number, LoginSite>();
+    }
+
+    const sites = await prisma.tbl_site.findMany({
+      where: {
+        site_id: { in: uniqueSiteIds },
+      },
+      select: {
+        site_id: true,
+        site_name: true,
+        sitepfd: true,
+        apikey: true,
+        assistantid: true,
+        threadid: true,
+        site_description: true,
+      },
+    });
+
+    return new Map(
+      sites.map((site) => [
+        site.site_id,
+        {
+          site_id: site.site_id,
+          site_name: site.site_name ?? null,
+          sitepfd: site.sitepfd ?? null,
+          apikey: site.apikey ?? null,
+          assistantid: site.assistantid ?? null,
+          threadid: site.threadid ?? null,
+          site_description: site.site_description ?? null,
+        },
+      ]),
+    );
+  }
+
+  private static async resolveUserSites(
+    appAssignedSiteId: number | null,
+    legacyUserId: number | null,
+    legacyRoleId: number | null,
+    existingCorporationId: number | null,
+  ): Promise<{ allsites: LoginSite[]; corporationId: number | null }> {
+    let corporationId = existingCorporationId ?? null;
+
+    // New auth service assignment model: single site_id on app_user.
+    if (appAssignedSiteId) {
+      const siteMap = await this.mapSitesByIds([appAssignedSiteId]);
+      const assignedSite = siteMap.get(appAssignedSiteId);
+      return {
+        allsites: assignedSite ? [assignedSite] : [],
+        corporationId,
+      };
+    }
+
+    // Legacy fallback path when app_user.site_id is empty.
+    if (!legacyRoleId) {
+      return { allsites: [], corporationId };
+    }
+
+    if (legacyRoleId === 1) {
+      const corpSites = await prisma.tbl_corporation_site.findMany({
+        where: { status: true, site_id: { not: null } },
+        select: {
+          corporation_id: true,
+          site_id: true,
+        },
+        orderBy: { site_id: "asc" },
+      });
+
+      const siteIds = corpSites
+        .map((item) => item.site_id)
+        .filter((siteId): siteId is number => siteId !== null);
+
+      const siteMap = await this.mapSitesByIds(siteIds);
+      const allsites = corpSites.flatMap((item) => {
+        if (!item.site_id) {
+          return [];
+        }
+        const site = siteMap.get(item.site_id);
+        if (!site) {
+          return [];
+        }
+
+        return [{ ...site, corporation_id: item.corporation_id ?? null }];
+      });
+
+      return { allsites, corporationId };
+    }
+
+    if (legacyRoleId === 6 || legacyRoleId === 14) {
+      if (!legacyUserId) {
+        return { allsites: [], corporationId };
+      }
+
+      const corpAdmin = await prisma.tbl_corporation_admin.findFirst({
+        where: {
+          user_id: legacyUserId,
+          status: true,
+        },
+        select: {
+          corporation_id: true,
+        },
+      });
+
+      corporationId = corpAdmin?.corporation_id ?? null;
+      if (!corporationId) {
+        return { allsites: [], corporationId };
+      }
+
+      const corpSites = await prisma.tbl_corporation_site.findMany({
+        where: {
+          corporation_id: corporationId,
+          status: true,
+          site_id: { not: null },
+        },
+        select: {
+          site_id: true,
+        },
+        orderBy: { site_id: "asc" },
+      });
+
+      const siteIds = corpSites
+        .map((item) => item.site_id)
+        .filter((siteId): siteId is number => siteId !== null);
+
+      const siteMap = await this.mapSitesByIds(siteIds);
+      const allsites = siteIds.flatMap((siteId) => {
+        const site = siteMap.get(siteId);
+        if (!site) {
+          return [];
+        }
+
+        return [{ ...site, corporation_id: corporationId }];
+      });
+
+      return { allsites, corporationId };
+    }
+
+    if (legacyRoleId === 10) {
+      if (!legacyUserId) {
+        return { allsites: [], corporationId };
+      }
+
+      const agentUserSites = await prisma.tbl_site_agentuser.findMany({
+        where: {
+          user_id: legacyUserId,
+          status: 1,
+        },
+        select: {
+          site_id: true,
+          agent_id: true,
+          chgPwd: true,
+        },
+        orderBy: { site_id: "asc" },
+      });
+
+      if (agentUserSites.length === 0) {
+        return { allsites: [], corporationId };
+      }
+
+      const activeAgents = await prisma.tbl_site_lab_agent.findMany({
+        where: {
+          id: { in: agentUserSites.map((item) => item.agent_id) },
+          status: true,
+        },
+        select: {
+          id: true,
+          source_name: true,
+        },
+      });
+
+      const activeAgentMap = new Map(
+        activeAgents.map((agent) => [agent.id, agent.source_name]),
+      );
+
+      const filteredSites = agentUserSites.filter((item) =>
+        activeAgentMap.has(item.agent_id),
+      );
+      const siteMap = await this.mapSitesByIds(filteredSites.map((item) => item.site_id));
+
+      const allsites = filteredSites.flatMap((item) => {
+        const site = siteMap.get(item.site_id);
+        if (!site) {
+          return [];
+        }
+
+        return [
+          {
+            ...site,
+            agent_id: item.agent_id,
+            changePassword: item.chgPwd,
+            source_name: activeAgentMap.get(item.agent_id) ?? null,
+          },
+        ];
+      });
+
+      return { allsites, corporationId };
+    }
+
+    const userSites = await prisma.tbl_siteuser.findMany({
+      where: {
+        user_id: legacyUserId ?? -1,
+      },
+      select: {
+        site_id: true,
+      },
+      orderBy: { site_id: "asc" },
+    });
+
+    const siteIds = userSites
+      .map((item) => item.site_id)
+      .filter((siteId): siteId is number => siteId !== null);
+    const siteMap = await this.mapSitesByIds(siteIds);
+    const allsites = siteIds.flatMap((siteId) => {
+      const site = siteMap.get(siteId);
+      if (!site) {
+        return [];
+      }
+
+      return [site];
+    });
+
+    return { allsites, corporationId };
+  }
+
+  private static async getLoginUser(username: string): Promise<LoginUser | null> {
+    const user = await prisma.app_user.findUnique({
+      where: { username },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        first_name: true,
+        last_name: true,
+        phone: true,
+        role_id: true,
+        site_id: true,
+        corporation_id: true,
+        status: true,
+      },
+    });
+
+    if (!user) {
+      return null;
+    }
+
+    const legacyUser = await prisma.tbl_users.findFirst({
+      where: {
+        username,
+        status: true,
+      },
+      select: {
+        user_id: true,
+        user_role: true,
+      },
+    });
+
+    const { allsites, corporationId } = await this.resolveUserSites(
+      user.site_id ?? null,
+      legacyUser?.user_id ?? null,
+      legacyUser?.user_role ?? null,
+      user.corporation_id ?? null,
+    );
+
+    return {
+      ...user,
+      site_id: allsites[0]?.site_id ?? user.site_id ?? null,
+      corporation_id: corporationId ?? user.corporation_id ?? null,
+      allsites,
+    };
+  }
+
   public static async signUp(payload: SignUpPayload): Promise<{
     username: string;
     user_sub: string;
@@ -462,35 +762,13 @@ export class AuthService {
     | {
         challenge_required: false;
         tokens: ReturnType<typeof toPublicTokens>;
-        user: {
-          id: number;
-          username: string;
-          email?: string | null;
-          first_name?: string | null;
-          last_name?: string | null;
-          phone?: string | null;
-          role_id?: number | null;
-          site_id?: number | null;
-          corporation_id?: number | null;
-          status: boolean;
-        } | null;
+        user: LoginUser | null;
       }
     | {
         challenge_required: true;
         challenge_name: string;
         session: string;
-        user: {
-          id: number;
-          username: string;
-          email?: string | null;
-          first_name?: string | null;
-          last_name?: string | null;
-          phone?: string | null;
-          role_id?: number | null;
-          site_id?: number | null;
-          corporation_id?: number | null;
-          status: boolean;
-        } | null;
+        user: LoginUser | null;
       }
   > {
     try {
@@ -498,21 +776,7 @@ export class AuthService {
         username: payload.username,
       });
 
-      const user = await prisma.app_user.findUnique({
-        where: { username: payload.username },
-        select: {
-          id: true,
-          username: true,
-          email: true,
-          first_name: true,
-          last_name: true,
-          phone: true,
-          role_id: true,
-          site_id: true,
-          corporation_id: true,
-          status: true,
-        },
-      });
+      const user = await this.getLoginUser(payload.username);
 
       if (!user || user.status !== true) {
         Logger.warn("InitiateLogin: User not approved or not active", {
@@ -603,18 +867,7 @@ export class AuthService {
     payload: LoginRespondPayload,
   ): Promise<{
     tokens: ReturnType<typeof toPublicTokens>;
-    user: {
-      id: number;
-      username: string;
-      email?: string | null;
-      first_name?: string | null;
-      last_name?: string | null;
-      phone?: string | null;
-      role_id?: number | null;
-      site_id?: number | null;
-      corporation_id?: number | null;
-      status: boolean;
-    } | null;
+    user: LoginUser | null;
   }> {
     try {
       Logger.debug("RespondToChallenge: Processing challenge response", {
@@ -637,21 +890,7 @@ export class AuthService {
         }),
       );
 
-      const user = await prisma.app_user.findUnique({
-        where: { username: payload.username },
-        select: {
-          id: true,
-          username: true,
-          email: true,
-          first_name: true,
-          last_name: true,
-          phone: true,
-          role_id: true,
-          site_id: true,
-          corporation_id: true,
-          status: true,
-        },
-      });
+      const user = await this.getLoginUser(payload.username);
 
       Logger.info("RespondToChallenge: Challenge response successful", {
         username: payload.username,
