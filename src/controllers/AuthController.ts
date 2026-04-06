@@ -1,5 +1,4 @@
 import { Request, Response } from "express";
-import { StatusCodes } from "http-status-codes";
 
 import { AuthService } from "../services/AuthService";
 import { ApiResponse } from "../utils/ApiResponse";
@@ -11,10 +10,25 @@ import {
   forgotPasswordSchema,
   loginInitiateSchema,
   loginRespondSchema,
-  signUpSchema
+  signUpSchema,
+  usernameAvailabilitySchema
 } from "../validations/AuthValidation";
 
 export class AuthController {
+  public static async checkUsernameAvailability(
+    req: Request,
+    res: Response
+  ): Promise<void> {
+    const payload = usernameAvailabilitySchema.parse(req.body);
+    const data = await AuthService.checkUsernameAvailability(payload);
+
+    ApiResponse.ok(
+      res,
+      data.available ? "Username is available." : "Username is already taken.",
+      data
+    );
+  }
+
   public static async signUp(req: Request, res: Response): Promise<void> {
     const payload = signUpSchema.parse(req.body);
     Logger.debug("SignUp initiated", { username: payload.username });

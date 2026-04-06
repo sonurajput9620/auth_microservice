@@ -1,4 +1,6 @@
 import {
+  AdminGetUserCommand,
+  AdminUpdateUserAttributesCommand,
   AdminInitiateAuthCommand,
   AdminRespondToAuthChallengeCommand,
   CognitoIdentityProviderClient,
@@ -21,6 +23,7 @@ import {
   LoginInitiatePayload,
   LoginRespondPayload,
   SignUpPayload,
+  UsernameAvailabilityPayload,
 } from "../validations/AuthValidation";
 
 const getEnv = (key: string): string => {
@@ -154,6 +157,92 @@ const throwLoginError = (errorName: string | undefined): never => {
     StatusCodes.UNAUTHORIZED,
     "AuthenticationFailed",
     "Authentication failed.",
+  );
+};
+
+const throwForgotPasswordError = (err: unknown): never => {
+  const errorName = getCognitoErrorName(err);
+  const message = err instanceof Error ? err.message : String(err);
+
+  if (errorName === "UserNotFoundException") {
+    throw new AppError(
+      StatusCodes.NOT_FOUND,
+      "UserNotFound",
+      "User not found in Cognito.",
+    );
+  }
+
+  if (errorName === "InvalidParameterException") {
+    if (message.includes("no registered/verified email or phone_number")) {
+      throw new AppError(
+        StatusCodes.BAD_REQUEST,
+        "PasswordRecoveryUnavailable",
+        "Password reset is unavailable because no verified email or phone number is registered for this user.",
+      );
+    }
+
+    throw new AppError(
+      StatusCodes.BAD_REQUEST,
+      "InvalidForgotPasswordRequest",
+      message,
+    );
+  }
+
+  if (errorName === "LimitExceededException") {
+    throw new AppError(
+      StatusCodes.TOO_MANY_REQUESTS,
+      "TooManyRequests",
+      "Too many password reset attempts. Please try again later.",
+    );
+  }
+
+  throw new AppError(
+    StatusCodes.BAD_GATEWAY,
+    "ForgotPasswordFailed",
+    "Failed to initiate forgot password.",
+  );
+};
+
+const throwConfirmForgotPasswordError = (err: unknown): never => {
+  const errorName = getCognitoErrorName(err);
+  const message = err instanceof Error ? err.message : String(err);
+
+  if (errorName === "UserNotFoundException") {
+    throw new AppError(
+      StatusCodes.NOT_FOUND,
+      "UserNotFound",
+      "User not found in Cognito.",
+    );
+  }
+
+  if (errorName === "CodeMismatchException") {
+    throw new AppError(
+      StatusCodes.BAD_REQUEST,
+      "InvalidConfirmationCode",
+      "Invalid confirmation code. Please check and try again.",
+    );
+  }
+
+  if (errorName === "ExpiredCodeException") {
+    throw new AppError(
+      StatusCodes.BAD_REQUEST,
+      "ExpiredConfirmationCode",
+      "Confirmation code expired. Please request a new code.",
+    );
+  }
+
+  if (errorName === "InvalidPasswordException") {
+    throw new AppError(
+      StatusCodes.BAD_REQUEST,
+      "InvalidPassword",
+      message,
+    );
+  }
+
+  throw new AppError(
+    StatusCodes.BAD_GATEWAY,
+    "ConfirmForgotPasswordFailed",
+    "Failed to confirm forgot password.",
   );
 };
 
@@ -459,6 +548,71 @@ export class AuthService {
     };
   }
 
+  public static async checkUsernameAvailability(
+    payload: UsernameAvailabilityPayload
+  ): Promise<{
+    username: string;
+    available: boolean;
+    source: "database" | "cognito";
+  }> {
+    const username = payload.username.trim();
+
+    const [existingAppUser, existingRegistration] = await Promise.all([
+      prisma.app_user.findUnique({
+        where: { username },
+        select: { id: true },
+      }),
+      prisma.register_user.findUnique({
+        where: { username },
+        select: { id: true },
+      }),
+    ]);
+
+    if (existingAppUser || existingRegistration) {
+      return {
+        username,
+        available: false,
+        source: "database",
+      };
+    }
+
+    try {
+      await cognitoClient.send(
+        new AdminGetUserCommand({
+          UserPoolId: COGNITO_USER_POOL_ID,
+          Username: username,
+        })
+      );
+
+      return {
+        username,
+        available: false,
+        source: "cognito",
+      };
+    } catch (err: unknown) {
+      const errorName = getCognitoErrorName(err);
+      if (errorName === "UserNotFoundException") {
+        return {
+          username,
+          available: true,
+          source: "cognito",
+        };
+      }
+
+      const error = err instanceof Error ? err : new Error(String(err));
+      Logger.error("Username availability check failed", error, {
+        username,
+        error_name: errorName,
+      });
+
+      throw new AppError(
+        StatusCodes.BAD_GATEWAY,
+        "UsernameAvailabilityFailed",
+        "Unable to check username availability right now."
+      );
+    }
+  }
+
   public static async signUp(payload: SignUpPayload): Promise<{
     username: string;
     user_sub: string;
@@ -548,6 +702,16 @@ export class AuthService {
           ClientId: COGNITO_CLIENT_ID,
           Username: payload.username,
           ConfirmationCode: payload.confirmation_code,
+        }),
+      );
+
+      // ConfirmSignUp verifies the sign-up code but does not reliably set the
+      // recovery attribute as verified for this username-based pool setup.
+      await cognitoClient.send(
+        new AdminUpdateUserAttributesCommand({
+          UserPoolId: COGNITO_USER_POOL_ID,
+          Username: payload.username,
+          UserAttributes: [{ Name: "email_verified", Value: "true" }],
         }),
       );
 
@@ -956,7 +1120,7 @@ export class AuthService {
           username: payload.username,
         },
       );
-      throw error;
+      return throwForgotPasswordError(err);
     }
   }
 
@@ -989,7 +1153,7 @@ export class AuthService {
           username: payload.username,
         },
       );
-      throw error;
+      return throwConfirmForgotPasswordError(err);
     }
   }
 }

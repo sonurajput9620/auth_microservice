@@ -9,6 +9,10 @@ export const signUpSchema = z.object({
   password: z.string().min(8)
 });
 
+export const usernameAvailabilitySchema = z.object({
+  username: z.string().min(3)
+});
+
 export const confirmSignUpSchema = z.object({
   username: z.string().min(3),
   confirmation_code: z.string().min(4)
@@ -70,6 +74,7 @@ export const confirmForgotPasswordSchema = z.object({
 });
 
 export type SignUpPayload = z.infer<typeof signUpSchema>;
+export type UsernameAvailabilityPayload = z.infer<typeof usernameAvailabilitySchema>;
 export type ConfirmSignUpPayload = z.infer<typeof confirmSignUpSchema>;
 export type ApproveRegistrationPayload = z.infer<typeof approveRegistrationSchema>;
 export type LoginInitiatePayload = z.infer<typeof loginInitiateSchema>;

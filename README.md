@@ -297,6 +297,14 @@ curl -X POST "http://localhost:4100/api/v1/auth/forgot-password/confirm" \
 AWS_DEFAULT_REGION=ap-south-1
 COGNITO_USER_POOL_ID=ap-south-1_IpHuY1R4r
 COGNITO_CLIENT_ID=4gan91cej5fd3carar5ispnoit
+COGNITO_VALIDATE_AUDIENCE=true
+
+# Hybrid auth toggle:
+# true  -> accepts legacy JWT + Cognito JWT
+# false -> accepts only Cognito JWT
+AUTH_ALLOW_LEGACY_JWT=true
+LEGACY_JWT_SECRET=hanifesmat1535
+
 DATABASE_URL=mysql://...
 PORT=4100
 ```
