@@ -12,7 +12,7 @@ const router = Router();
 router.get(
   "/",
   RequireAuth,
-  RequireAnyPermission("role-management.view", "roles.read"),
+  // RequireAnyPermission("role-management.view", "roles.read"),
   AsyncTryCatch(RoleController.getRoles)
 );
 router.post(

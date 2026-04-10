@@ -413,7 +413,7 @@ const isAuthDisabled = (): boolean => {
 
 const isAdmin = (auth: AuthContext): boolean => {
   const role = auth.role?.toLowerCase() ?? "";
-  if (role === "admin" || role === "administrator" || role === "1") {
+  if (role === "admin" || role === "administrator" || role == "1") {
     return true;
   }
 

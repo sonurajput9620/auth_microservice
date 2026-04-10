@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import { AuthController } from "../../controllers/AuthController";
+import { RequireAuth } from "../../middlewares/AuthorizationMiddleware";
 import { AsyncTryCatch } from "../../utils/AsyncTryCatch";
 
 const router = Router();
@@ -8,7 +9,8 @@ const router = Router();
 router.post("/username/availability", AsyncTryCatch(AuthController.checkUsernameAvailability));
 router.post("/signup", AsyncTryCatch(AuthController.signUp));
 router.post("/signup/confirm", AsyncTryCatch(AuthController.confirmSignUp));
-router.post("/registrations/:id/review", AsyncTryCatch(AuthController.reviewRegistration));
+router.get("/registrations", RequireAuth, AsyncTryCatch(AuthController.listRegistrations));
+router.post("/registrations/:id/review", RequireAuth, AsyncTryCatch(AuthController.reviewRegistration));
 router.post("/login/initiate", AsyncTryCatch(AuthController.initiateLogin));
 router.post("/login/respond", AsyncTryCatch(AuthController.respondToChallenge));
 router.post("/forgot-password", AsyncTryCatch(AuthController.forgotPassword));

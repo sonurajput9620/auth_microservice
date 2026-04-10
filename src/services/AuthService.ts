@@ -20,6 +20,7 @@ import {
   ConfirmForgotPasswordPayload,
   ConfirmSignUpPayload,
   ForgotPasswordPayload,
+  ListRegistrationsQuery,
   LoginInitiatePayload,
   LoginRespondPayload,
   SignUpPayload,
@@ -268,13 +269,84 @@ type LoginUser = {
   last_name?: string | null;
   phone?: string | null;
   role_id?: number | null;
+  role_name?: string | null;
   site_id?: number | null;
   corporation_id?: number | null;
   status: boolean;
+  permissions: string[];
   allsites: LoginSite[];
 };
 
+type RegistrationListItem = {
+  registration_id: number;
+  username: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  phone: string | null;
+  status: "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
+  email_verified: boolean;
+  review_note: string | null;
+  reviewed_by: number | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  app_user_id: number | null;
+  role_id: string | null;
+  role_name: string | null;
+  site_id: number | null;
+  site_name: string | null;
+  corporation_id: number | null;
+  corporation_name: string | null;
+};
+
 export class AuthService {
+  private static async mapRoleNamesByIds(roleIds: number[]): Promise<Map<number, string>> {
+    const uniqueRoleIds = Array.from(new Set(roleIds));
+    if (uniqueRoleIds.length === 0) {
+      return new Map<number, string>();
+    }
+
+    const roles = await prisma.roles.findMany({
+      where: {
+        id: { in: uniqueRoleIds },
+        is_deleted: false,
+      },
+      select: {
+        id: true,
+        role_name: true,
+      },
+    });
+
+    return new Map(roles.map((role) => [role.id, role.role_name]));
+  }
+
+  private static async mapCorporationNamesByIds(
+    corporationIds: number[],
+  ): Promise<Map<number, string>> {
+    const uniqueCorporationIds = Array.from(new Set(corporationIds));
+    if (uniqueCorporationIds.length === 0) {
+      return new Map<number, string>();
+    }
+
+    const corporations = await prisma.tbl_corporation.findMany({
+      where: {
+        corporation_id: { in: uniqueCorporationIds },
+      },
+      select: {
+        corporation_id: true,
+        corporation_name: true,
+      },
+    });
+
+    return new Map(
+      corporations.map((corporation) => [
+        corporation.corporation_id,
+        corporation.corporation_name ?? `Corporation ${corporation.corporation_id}`,
+      ]),
+    );
+  }
+
   private static async mapSitesByIds(siteIds: number[]): Promise<Map<number, LoginSite>> {
     const uniqueSiteIds = Array.from(new Set(siteIds));
     if (uniqueSiteIds.length === 0) {
@@ -522,16 +594,47 @@ export class AuthService {
       return null;
     }
 
-    const legacyUser = await prisma.tbl_users.findFirst({
-      where: {
-        username,
-        status: true,
-      },
-      select: {
-        user_id: true,
-        user_role: true,
-      },
-    });
+    const [legacyUser, role] = await Promise.all([
+      prisma.tbl_users.findFirst({
+        where: {
+          username,
+          status: true,
+        },
+        select: {
+          user_id: true,
+          user_role: true,
+        },
+      }),
+      user.role_id
+        ? prisma.roles.findFirst({
+            where: {
+              id: user.role_id,
+              is_deleted: false,
+            },
+            select: {
+              role_name: true,
+              role_sub_feature_permissions: {
+                where: {
+                  is_enabled: true,
+                  permission_sub_features: {
+                    is_active: true,
+                    permission_features: {
+                      is_active: true,
+                    },
+                  },
+                },
+                select: {
+                  permission_sub_features: {
+                    select: {
+                      sub_feature_key: true,
+                    },
+                  },
+                },
+              },
+            },
+          })
+        : Promise.resolve(null),
+    ]);
 
     const { allsites, corporationId } = await this.resolveUserSites(
       user.site_id ?? null,
@@ -540,10 +643,20 @@ export class AuthService {
       user.corporation_id ?? null,
     );
 
+    const permissions = Array.from(
+      new Set(
+        (role?.role_sub_feature_permissions ?? []).map(
+          (permission) => permission.permission_sub_features.sub_feature_key,
+        ),
+      ),
+    ).sort((left, right) => left.localeCompare(right));
+
     return {
       ...user,
+      role_name: role?.role_name ?? null,
       site_id: allsites[0]?.site_id ?? user.site_id ?? null,
       corporation_id: corporationId ?? user.corporation_id ?? null,
+      permissions,
       allsites,
     };
   }
@@ -876,6 +989,43 @@ export class AuthService {
         reviewed_by: payload.approved_by,
       });
 
+      let resolvedRoleId: number | null = null;
+      if (typeof payload.role_id === "number") {
+        resolvedRoleId = payload.role_id;
+      } else if (typeof payload.role_id === "string") {
+        if (/^\d+$/.test(payload.role_id)) {
+          resolvedRoleId = Number(payload.role_id);
+        } else {
+          const mappedRole = await prisma.roles.findFirst({
+            where: {
+              role_uid: payload.role_id,
+              is_deleted: false,
+            },
+            select: {
+              id: true,
+            },
+          });
+
+          if (!mappedRole) {
+            throw new AppError(
+              StatusCodes.BAD_REQUEST,
+              "InvalidRole",
+              "Selected role was not found.",
+            );
+          }
+
+          resolvedRoleId = mappedRole.id;
+        }
+      }
+
+      if (!resolvedRoleId) {
+        throw new AppError(
+          StatusCodes.BAD_REQUEST,
+          "InvalidRole",
+          "role_id is required for APPROVE.",
+        );
+      }
+
       const appUser = await prisma.$transaction(async (tx) => {
         const updatedRegistration = await tx.register_user.update({
           where: { id: registrationId },
@@ -895,7 +1045,7 @@ export class AuthService {
             phone: updatedRegistration.phone,
             first_name: updatedRegistration.first_name,
             last_name: updatedRegistration.last_name,
-            role_id: payload.role_id,
+            role_id: resolvedRoleId,
             site_id: payload.site_id,
             corporation_id: payload.corporation_id,
             status: true,
@@ -920,6 +1070,80 @@ export class AuthService {
       });
       throw error;
     }
+  }
+
+  public static async listRegistrations(
+    query: ListRegistrationsQuery,
+  ): Promise<RegistrationListItem[]> {
+    const registrations = await prisma.register_user.findMany({
+      where: query.status
+        ? {
+            status: query.status,
+          }
+        : undefined,
+      include: {
+        app_user: {
+          select: {
+            id: true,
+            role_id: true,
+            site_id: true,
+            corporation_id: true,
+          },
+        },
+      },
+      orderBy: [{ created_at: "desc" }],
+    });
+
+    const roleIds = registrations
+      .map((item) => item.app_user?.role_id)
+      .filter((roleId): roleId is number => typeof roleId === "number");
+    const siteIds = registrations
+      .map((item) => item.app_user?.site_id)
+      .filter((siteId): siteId is number => typeof siteId === "number");
+    const corporationIds = registrations
+      .map((item) => item.app_user?.corporation_id)
+      .filter((corporationId): corporationId is number => typeof corporationId === "number");
+
+    const [roleMap, siteMap, corporationMap] = await Promise.all([
+      this.mapRoleNamesByIds(roleIds),
+      this.mapSitesByIds(siteIds),
+      this.mapCorporationNamesByIds(corporationIds),
+    ]);
+
+    return registrations.map((registration) => ({
+      registration_id: registration.id,
+      username: registration.username,
+      first_name: registration.first_name ?? null,
+      last_name: registration.last_name ?? null,
+      email: registration.email ?? null,
+      phone: registration.phone ?? null,
+      status: registration.status,
+      email_verified: registration.email_verified,
+      review_note: registration.review_note ?? null,
+      reviewed_by: registration.reviewed_by ?? null,
+      reviewed_at: registration.reviewed_at?.toISOString() ?? null,
+      created_at: registration.created_at.toISOString(),
+      updated_at: registration.updated_at.toISOString(),
+      app_user_id: registration.app_user?.id ?? null,
+      role_id:
+        typeof registration.app_user?.role_id === "number"
+          ? String(registration.app_user.role_id)
+          : null,
+      role_name:
+        typeof registration.app_user?.role_id === "number"
+          ? roleMap.get(registration.app_user.role_id) ?? null
+          : null,
+      site_id: registration.app_user?.site_id ?? null,
+      site_name:
+        typeof registration.app_user?.site_id === "number"
+          ? siteMap.get(registration.app_user.site_id)?.site_name ?? null
+          : null,
+      corporation_id: registration.app_user?.corporation_id ?? null,
+      corporation_name:
+        typeof registration.app_user?.corporation_id === "number"
+          ? corporationMap.get(registration.app_user.corporation_id) ?? null
+          : null,
+    }));
   }
 
   public static async initiateLogin(payload: LoginInitiatePayload): Promise<

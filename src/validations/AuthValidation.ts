@@ -21,7 +21,7 @@ export const confirmSignUpSchema = z.object({
 export const approveRegistrationSchema = z.object({
   action: z.enum(["APPROVE", "REJECT"]),
   review_note: z.string().min(1).optional(),
-  role_id: z.number().int().positive().optional(),
+  role_id: z.union([z.number().int().positive(), z.string().min(1)]).optional(),
   site_id: z.number().int().positive().optional(),
   corporation_id: z.number().int().positive().optional(),
   approved_by: z.number().int().positive().optional()
@@ -51,6 +51,10 @@ export const approveRegistrationSchema = z.object({
   }
 });
 
+export const listRegistrationsQuerySchema = z.object({
+  status: z.enum(["PENDING_APPROVAL", "APPROVED", "REJECTED"]).optional()
+});
+
 export const loginInitiateSchema = z.object({
   username: z.string().min(3),
   password: z.string().min(8)
@@ -77,6 +81,7 @@ export type SignUpPayload = z.infer<typeof signUpSchema>;
 export type UsernameAvailabilityPayload = z.infer<typeof usernameAvailabilitySchema>;
 export type ConfirmSignUpPayload = z.infer<typeof confirmSignUpSchema>;
 export type ApproveRegistrationPayload = z.infer<typeof approveRegistrationSchema>;
+export type ListRegistrationsQuery = z.infer<typeof listRegistrationsQuerySchema>;
 export type LoginInitiatePayload = z.infer<typeof loginInitiateSchema>;
 export type LoginRespondPayload = z.infer<typeof loginRespondSchema>;
 export type ForgotPasswordPayload = z.infer<typeof forgotPasswordSchema>;

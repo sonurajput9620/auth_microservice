@@ -8,6 +8,7 @@ import {
   confirmForgotPasswordSchema,
   confirmSignUpSchema,
   forgotPasswordSchema,
+  listRegistrationsQuerySchema,
   loginInitiateSchema,
   loginRespondSchema,
   signUpSchema,
@@ -88,6 +89,13 @@ export class AuthController {
         : "User rejected successfully.",
       data
     );
+  }
+
+  public static async listRegistrations(req: Request, res: Response): Promise<void> {
+    const query = listRegistrationsQuerySchema.parse(req.query);
+    const data = await AuthService.listRegistrations(query);
+
+    ApiResponse.ok(res, "Registration requests fetched successfully.", data);
   }
 
   public static async initiateLogin(req: Request, res: Response): Promise<void> {
