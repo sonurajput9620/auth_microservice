@@ -13,7 +13,7 @@ This backend manages Cognito flows with your custom APIs:
 - Email verification
 - Admin approval/rejection in `register_user`
 - Move approved users into `app_user`
-- Login with MFA challenge
+- Login with backend-managed custom email OTP
 - Forgot password
 
 ## 1) Sign Up
@@ -172,16 +172,22 @@ curl -X POST "http://localhost:4100/api/v1/auth/login/initiate" \
   -d "{\"username\":\"jdoe01\",\"password\":\"StrongPass#123\"}"
 ```
 
-If MFA is required, response contains `challenge_name` and `session`:
+Password is verified with Cognito first. If successful, the backend stores a
+short-lived login challenge in MySQL, sends a custom email OTP via SMTP, and
+returns the challenge session:
 
 ```json
 {
   "success": true,
-  "message": "MFA challenge sent.",
+  "message": "Login OTP sent.",
   "data": {
     "challenge_required": true,
-    "challenge_name": "EMAIL_OTP",
-    "session": "<cognito-session-token>"
+    "challenge_name": "CUSTOM_EMAIL_OTP",
+    "session": "<login-session-id>",
+    "delivery_medium": "EMAIL",
+    "destination": "jo******@e******.com",
+    "expires_at": "2026-04-11T15:32:00.000Z",
+    "resend_available_at": "2026-04-11T15:27:30.000Z"
   }
 }
 ```
@@ -199,8 +205,8 @@ Request body:
 ```json
 {
   "username": "jdoe01",
-  "session": "<cognito-session-token>",
-  "challenge_name": "EMAIL_OTP",
+  "session": "<login-session-id>",
+  "challenge_name": "CUSTOM_EMAIL_OTP",
   "challenge_code": "654321"
 }
 ```
@@ -218,7 +224,7 @@ Typical response:
 ```json
 {
   "success": true,
-  "message": "MFA verified. Login successful.",
+  "message": "Login OTP verified. Login successful.",
   "data": {
     "tokens": {
       "access_token": "<access-token>",
@@ -230,7 +236,24 @@ Typical response:
 }
 ```
 
-## 6) Forgot Password
+## 6) Resend Login OTP
+
+Endpoint:
+
+```http
+POST /api/v1/auth/login/resend
+```
+
+Request body:
+
+```json
+{
+  "username": "jdoe01",
+  "session": "<login-session-id>"
+}
+```
+
+## 7) Forgot Password
 
 Endpoint:
 
@@ -254,7 +277,7 @@ curl -X POST "http://localhost:4100/api/v1/auth/forgot-password" \
   -d "{\"username\":\"jdoe01\"}"
 ```
 
-## 7) Confirm Forgot Password
+## 8) Confirm Forgot Password
 
 Endpoint:
 
@@ -295,16 +318,38 @@ curl -X POST "http://localhost:4100/api/v1/auth/forgot-password/confirm" \
 
 ```env
 AWS_DEFAULT_REGION=ap-south-1
-COGNITO_USER_POOL_ID=ap-south-1_IpHuY1R4r
-COGNITO_CLIENT_ID=4gan91cej5fd3carar5ispnoit
+COGNITO_USER_POOL_ID=ap-south-1_examplePoolId
+COGNITO_CLIENT_ID=exampleclientid1234567890
 COGNITO_VALIDATE_AUDIENCE=true
+
+# Custom login OTP configuration
+AUTH_SESSION_SECRET=replace-with-a-long-random-secret
+AUTH_OTP_TTL_MINUTES=5
+AUTH_OTP_MAX_ATTEMPTS=3
+AUTH_OTP_RESEND_COOLDOWN_SECONDS=30
+
+# SMTP configuration for custom login OTP email
+SMTP_HOST=smtp.your-provider.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=mailer@your-domain.com
+SMTP_PASS=your-smtp-password
+SMTP_FROM_EMAIL=mailer@your-domain.com
+SMTP_FROM_NAME=Pure BI Auth
 
 # Hybrid auth toggle:
 # true  -> accepts legacy JWT + Cognito JWT
 # false -> accepts only Cognito JWT
 AUTH_ALLOW_LEGACY_JWT=true
-LEGACY_JWT_SECRET=hanifesmat1535
+LEGACY_JWT_SECRET=replace-with-a-long-random-secret
 
 DATABASE_URL=mysql://...
 PORT=4100
 ```
+
+## AWS Cognito settings
+
+- Set Cognito user pool MFA to `OFF`
+- Keep email recovery enabled for forgot password
+- Keep `ADMIN_USER_PASSWORD_AUTH` enabled on the app client
+- Leave signup email verification enabled

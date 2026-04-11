@@ -63,8 +63,13 @@ export const loginInitiateSchema = z.object({
 export const loginRespondSchema = z.object({
   username: z.string().min(3),
   session: z.string().min(1),
-  challenge_name: z.string().min(1),
-  challenge_code: z.string().min(1)
+  challenge_name: z.enum(["CUSTOM_EMAIL_OTP", "EMAIL_OTP"]),
+  challenge_code: z.string().trim().regex(/^\d{6}$/, "challenge_code must be a 6 digit OTP")
+});
+
+export const loginResendSchema = z.object({
+  username: z.string().min(3),
+  session: z.string().min(1)
 });
 
 export const forgotPasswordSchema = z.object({
@@ -84,5 +89,6 @@ export type ApproveRegistrationPayload = z.infer<typeof approveRegistrationSchem
 export type ListRegistrationsQuery = z.infer<typeof listRegistrationsQuerySchema>;
 export type LoginInitiatePayload = z.infer<typeof loginInitiateSchema>;
 export type LoginRespondPayload = z.infer<typeof loginRespondSchema>;
+export type LoginResendPayload = z.infer<typeof loginResendSchema>;
 export type ForgotPasswordPayload = z.infer<typeof forgotPasswordSchema>;
 export type ConfirmForgotPasswordPayload = z.infer<typeof confirmForgotPasswordSchema>;

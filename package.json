@@ -23,6 +23,7 @@
     "@aws-sdk/client-sns": "^3.989.0",
     "@aws-sdk/client-ssm": "^3.989.0",
     "@prisma/client": "^6.3.1",
+    "@vendia/serverless-express": "^4.12.6",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",

@@ -13,6 +13,7 @@ router.get("/registrations", RequireAuth, AsyncTryCatch(AuthController.listRegis
 router.post("/registrations/:id/review", RequireAuth, AsyncTryCatch(AuthController.reviewRegistration));
 router.post("/login/initiate", AsyncTryCatch(AuthController.initiateLogin));
 router.post("/login/respond", AsyncTryCatch(AuthController.respondToChallenge));
+router.post("/login/resend", AsyncTryCatch(AuthController.resendLoginOtp));
 router.post("/forgot-password", AsyncTryCatch(AuthController.forgotPassword));
 router.post("/forgot-password/confirm", AsyncTryCatch(AuthController.confirmForgotPassword));
 

@@ -1,0 +1,104 @@
+service: auth-microservice-lambda
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: ${env:AWS_DEFAULT_REGION, 'ap-south-1'}
+  memorySize: 512
+  timeout: 29
+  versionFunctions: false
+
+  # Uncomment if the database is reachable only inside a VPC.
+  # vpc:
+  #   securityGroupIds:
+  #     - sg-xxxxxxxxxxxxxxxxx
+  #   subnetIds:
+  #     - subnet-xxxxxxxxxxxxxxxxx
+  #     - subnet-yyyyyyyyyyyyyyyyy
+
+  environment:
+    AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
+    NODE_ENV: ${env:NODE_ENV, 'production'}
+    PORT: ${env:PORT, '4100'}
+    DATABASE_URL: ${env:DATABASE_URL}
+    AWS_DEFAULT_REGION: ${env:AWS_DEFAULT_REGION}
+    COGNITO_USER_POOL_ID: ${env:COGNITO_USER_POOL_ID}
+    COGNITO_CLIENT_ID: ${env:COGNITO_CLIENT_ID}
+    AUTH_SESSION_SECRET: ${env:AUTH_SESSION_SECRET}
+    AUTH_OTP_TTL_MINUTES: ${env:AUTH_OTP_TTL_MINUTES, '5'}
+    AUTH_OTP_MAX_ATTEMPTS: ${env:AUTH_OTP_MAX_ATTEMPTS, '3'}
+    AUTH_OTP_RESEND_COOLDOWN_SECONDS: ${env:AUTH_OTP_RESEND_COOLDOWN_SECONDS, '30'}
+    SMTP_HOST: ${env:SMTP_HOST}
+    SMTP_PORT: ${env:SMTP_PORT}
+    SMTP_SECURE: ${env:SMTP_SECURE, 'false'}
+    SMTP_USER: ${env:SMTP_USER}
+    SMTP_PASS: ${env:SMTP_PASS}
+    SMTP_FROM_EMAIL: ${env:SMTP_FROM_EMAIL}
+    SMTP_FROM_NAME: ${env:SMTP_FROM_NAME}
+    LOG_LEVEL: ${env:LOG_LEVEL, 'info'}
+
+  httpApi:
+    cors:
+      allowedOrigins:
+        - http://localhost:4200
+        - http://localhost:3000
+        - https://dev.pure.bi
+        - https://nodetest.pure.bi
+        - https://staging.pure.bi
+        - https://app.pure.bi
+        - https://test.pure.bi
+      allowedHeaders:
+        - Content-Type
+        - Authorization
+        - X-Requested-With
+        - Accept
+        - Origin
+        - X-Api-Key
+      allowedMethods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        - PATCH
+        - OPTIONS
+      allowCredentials: true
+      maxAge: 86400
+
+package:
+  individually: true
+  patterns:
+    - '!node_modules/**'
+    - '!tests/**'
+    - '!.git/**'
+    - '!*.md'
+    - 'node_modules/.prisma/**'
+    - 'node_modules/@prisma/client/**'
+    - 'prisma/**'
+
+functions:
+  api:
+    handler: lambda.handler
+    events:
+      - httpApi:
+          method: ANY
+          path: /{proxy+}
+
+plugins:
+  - serverless-esbuild
+  - serverless-offline
+
+custom:
+  esbuild:
+    bundle: true
+    minify: false
+    sourcemap: true
+    exclude:
+      - '@prisma/client'
+    target: node20
+    platform: node
+    concurrency: 10
+    packager: npm
+    packagePath: package.json
+  serverless-offline:
+    httpPort: 4101
+    lambdaPort: 4102

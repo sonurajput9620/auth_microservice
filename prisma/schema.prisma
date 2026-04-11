@@ -2895,6 +2895,31 @@ model app_user {
   @@index([status], map: "idx_app_user_status")
 }
 
+model login_otp_challenge {
+  id                      Int                            @id @default(autoincrement())
+  challenge_id            String                         @unique(map: "uniq_login_otp_challenge_challenge_id") @db.VarChar(64)
+  username                String                         @db.VarChar(120)
+  email                   String                         @db.VarChar(255)
+  app_user_id             Int
+  otp_hash                String?                        @db.VarChar(255)
+  otp_expires_at          DateTime                       @db.DateTime(0)
+  attempt_count           Int                            @default(0)
+  max_attempts            Int                            @default(3)
+  resend_count            Int                            @default(0)
+  resend_available_at     DateTime                       @db.DateTime(0)
+  last_sent_at            DateTime                       @db.DateTime(0)
+  challenge_status        login_otp_challenge_status_enum @default(PENDING)
+  token_bundle_ciphertext String?                        @db.Text
+  consumed_at             DateTime?                      @db.DateTime(0)
+  created_at              DateTime                       @default(now()) @db.DateTime(0)
+  updated_at              DateTime                       @default(now()) @updatedAt @db.DateTime(0)
+
+  @@index([username, challenge_status], map: "idx_login_otp_challenge_username_status")
+  @@index([otp_expires_at], map: "idx_login_otp_challenge_otp_expires_at")
+  @@index([challenge_status, resend_available_at], map: "idx_login_otp_challenge_status_resend")
+  @@index([app_user_id], map: "idx_login_otp_challenge_app_user_id")
+}
+
 model ai_alert_history {
   id              BigInt    @id @default(autoincrement())
   alertid         BigInt?
@@ -3406,6 +3431,13 @@ enum feature_import_status_enum {
   VALIDATED
   APPLIED
   FAILED
+}
+
+enum login_otp_challenge_status_enum {
+  PENDING
+  VERIFIED
+  FAILED
+  EXPIRED
 }
 
 enum RegistrationStatus {

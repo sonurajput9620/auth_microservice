@@ -10,6 +10,7 @@ import {
   forgotPasswordSchema,
   listRegistrationsQuerySchema,
   loginInitiateSchema,
+  loginResendSchema,
   loginRespondSchema,
   signUpSchema,
   usernameAvailabilitySchema
@@ -105,17 +106,17 @@ export class AuthController {
     const data = await AuthService.initiateLogin(payload);
 
     if (data.challenge_required) {
-      Logger.info("MFA challenge required", {
+      Logger.info("Custom login OTP challenge created", {
         username: payload.username,
         challenge_name: data.challenge_name
       });
     } else {
-      Logger.info("Login successful without MFA", { username: payload.username });
+      Logger.info("Login completed", { username: payload.username });
     }
 
     ApiResponse.ok(
       res,
-      data.challenge_required ? "MFA challenge sent." : "Login successful.",
+      data.challenge_required ? "Login OTP sent." : "Login successful.",
       data
     );
   }
@@ -129,11 +130,26 @@ export class AuthController {
 
     const data = await AuthService.respondToChallenge(payload);
 
-    Logger.info("MFA verified and login successful", {
+    Logger.info("Login OTP verified and login successful", {
       username: payload.username
     });
 
-    ApiResponse.ok(res, "MFA verified. Login successful.", data);
+    ApiResponse.ok(res, "Login OTP verified. Login successful.", data);
+  }
+
+  public static async resendLoginOtp(req: Request, res: Response): Promise<void> {
+    const payload = loginResendSchema.parse(req.body);
+    Logger.debug("Login OTP resend initiated", {
+      username: payload.username
+    });
+
+    const data = await AuthService.resendLoginOtp(payload);
+
+    Logger.info("Login OTP resent successfully", {
+      username: payload.username
+    });
+
+    ApiResponse.ok(res, "A new login OTP has been sent.", data);
   }
 
   public static async forgotPassword(req: Request, res: Response): Promise<void> {

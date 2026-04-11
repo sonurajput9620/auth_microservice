@@ -1,8 +1,8 @@
 {
   "info": {
-    "name": "Auth Microservice - Cognito Flow",
+    "name": "Auth Microservice - Custom Email OTP Flow",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
-    "description": "Custom backend APIs for Cognito signup, confirmation, admin approval, login MFA, and forgot password."
+    "description": "Custom backend APIs for Cognito signup, email verification, admin approval, custom login email OTP, resend OTP, and Cognito forgot password."
   },
   "variable": [
     { "key": "baseUrl", "value": "http://localhost:4100" },
@@ -13,12 +13,30 @@
     { "key": "confirmationCode", "value": "123456" },
     { "key": "challengeCode", "value": "654321" },
     { "key": "registrationId", "value": "12" },
-    { "key": "session", "value": "<cognito-session-token>" },
-    { "key": "challengeName", "value": "EMAIL_OTP" }
+    { "key": "session", "value": "<login-session-id>" },
+    { "key": "challengeName", "value": "CUSTOM_EMAIL_OTP" },
+    { "key": "authToken", "value": "<bearer-token-for-protected-routes>" },
+    { "key": "accessToken", "value": "" },
+    { "key": "idToken", "value": "" },
+    { "key": "refreshToken", "value": "" }
   ],
   "item": [
     {
-      "name": "1. Sign Up",
+      "name": "1. Username Availability",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{username}}\"\n}"
+        },
+        "url": "{{baseUrl}}/api/{{apiVersion}}/auth/username/availability"
+      }
+    },
+    {
+      "name": "2. Sign Up",
       "request": {
         "method": "POST",
         "header": [
@@ -32,7 +50,7 @@
       }
     },
     {
-      "name": "2. Confirm Sign Up",
+      "name": "3. Confirm Sign Up",
       "request": {
         "method": "POST",
         "header": [
@@ -46,11 +64,22 @@
       }
     },
     {
-      "name": "3. Review Registration - APPROVE",
+      "name": "4. List Registrations",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{authToken}}" }
+        ],
+        "url": "{{baseUrl}}/api/{{apiVersion}}/auth/registrations"
+      }
+    },
+    {
+      "name": "5. Review Registration - APPROVE",
       "request": {
         "method": "POST",
         "header": [
-          { "key": "Content-Type", "value": "application/json" }
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{authToken}}" }
         ],
         "body": {
           "mode": "raw",
@@ -60,11 +89,12 @@
       }
     },
     {
-      "name": "4. Review Registration - REJECT",
+      "name": "6. Review Registration - REJECT",
       "request": {
         "method": "POST",
         "header": [
-          { "key": "Content-Type", "value": "application/json" }
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{authToken}}" }
         ],
         "body": {
           "mode": "raw",
@@ -74,7 +104,22 @@
       }
     },
     {
-      "name": "5. Login Initiate",
+      "name": "7. Login Initiate",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const body = pm.response.json();",
+              "if (body && body.data) {",
+              "  if (body.data.session) pm.collectionVariables.set('session', body.data.session);",
+              "  if (body.data.challenge_name) pm.collectionVariables.set('challengeName', body.data.challenge_name);",
+              "}"
+            ]
+          }
+        }
+      ],
       "request": {
         "method": "POST",
         "header": [
@@ -88,7 +133,27 @@
       }
     },
     {
-      "name": "6. Login Respond (MFA)",
+      "name": "8. Login Respond (Custom Email OTP)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const body = pm.response.json();",
+              "if (body && body.data && body.data.tokens) {",
+              "  const tokens = body.data.tokens;",
+              "  if (tokens.access_token) {",
+              "    pm.collectionVariables.set('accessToken', tokens.access_token);",
+              "    pm.collectionVariables.set('authToken', tokens.access_token);",
+              "  }",
+              "  if (tokens.id_token) pm.collectionVariables.set('idToken', tokens.id_token);",
+              "  if (tokens.refresh_token) pm.collectionVariables.set('refreshToken', tokens.refresh_token);",
+              "}"
+            ]
+          }
+        }
+      ],
       "request": {
         "method": "POST",
         "header": [
@@ -102,7 +167,21 @@
       }
     },
     {
-      "name": "7. Forgot Password",
+      "name": "9. Resend Login OTP",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{username}}\",\n  \"session\": \"{{session}}\"\n}"
+        },
+        "url": "{{baseUrl}}/api/{{apiVersion}}/auth/login/resend"
+      }
+    },
+    {
+      "name": "10. Forgot Password",
       "request": {
         "method": "POST",
         "header": [
@@ -116,7 +195,7 @@
       }
     },
     {
-      "name": "8. Confirm Forgot Password",
+      "name": "11. Confirm Forgot Password",
       "request": {
         "method": "POST",
         "header": [
