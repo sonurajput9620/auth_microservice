@@ -10,9 +10,10 @@ import {
   forgotPasswordSchema,
   listRegistrationsQuerySchema,
   loginInitiateSchema,
-  loginRespondSchema,
+  resendLoginOtpSchema,
   signUpSchema,
-  usernameAvailabilitySchema
+  usernameAvailabilitySchema,
+  verifyLoginOtpSchema
 } from "../validations/AuthValidation";
 
 export class AuthController {
@@ -100,40 +101,49 @@ export class AuthController {
 
   public static async initiateLogin(req: Request, res: Response): Promise<void> {
     const payload = loginInitiateSchema.parse(req.body);
-    Logger.debug("Login initiation started", { username: payload.username });
+    Logger.debug("Login initiation started", { email: payload.email });
 
     const data = await AuthService.initiateLogin(payload);
 
-    if (data.challenge_required) {
-      Logger.info("MFA challenge required", {
-        username: payload.username,
-        challenge_name: data.challenge_name
-      });
-    } else {
-      Logger.info("Login successful without MFA", { username: payload.username });
-    }
+    Logger.info("Custom login OTP required", {
+      email: payload.email,
+      challenge_id: data.challenge_id
+    });
 
-    ApiResponse.ok(
-      res,
-      data.challenge_required ? "MFA challenge sent." : "Login successful.",
-      data
-    );
+    ApiResponse.ok(res, "OTP sent to your email.", data);
   }
 
-  public static async respondToChallenge(req: Request, res: Response): Promise<void> {
-    const payload = loginRespondSchema.parse(req.body);
-    Logger.debug("Challenge response initiated", {
-      username: payload.username,
-      challenge_name: payload.challenge_name
+  public static async verifyLoginOtp(req: Request, res: Response): Promise<void> {
+    const payload = verifyLoginOtpSchema.parse(req.body);
+    Logger.debug("Login OTP verification initiated", {
+      email: payload.email,
+      challenge_id: payload.challenge_id
     });
 
-    const data = await AuthService.respondToChallenge(payload);
+    const data = await AuthService.verifyLoginOtp(payload);
 
-    Logger.info("MFA verified and login successful", {
-      username: payload.username
+    Logger.info("Login OTP verified successfully", {
+      email: payload.email
     });
 
-    ApiResponse.ok(res, "MFA verified. Login successful.", data);
+    ApiResponse.ok(res, "Login successful.", data);
+  }
+
+  public static async resendLoginOtp(req: Request, res: Response): Promise<void> {
+    const payload = resendLoginOtpSchema.parse(req.body);
+    Logger.debug("Resend login OTP initiated", {
+      email: payload.email,
+      challenge_id: payload.challenge_id
+    });
+
+    const data = await AuthService.resendLoginOtp(payload);
+
+    Logger.info("Login OTP resent successfully", {
+      email: payload.email,
+      challenge_id: payload.challenge_id
+    });
+
+    ApiResponse.ok(res, "A new OTP has been sent.", data);
   }
 
   public static async forgotPassword(req: Request, res: Response): Promise<void> {

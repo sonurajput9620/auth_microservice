@@ -11,8 +11,10 @@ router.post("/signup", AsyncTryCatch(AuthController.signUp));
 router.post("/signup/confirm", AsyncTryCatch(AuthController.confirmSignUp));
 router.get("/registrations", RequireAuth, AsyncTryCatch(AuthController.listRegistrations));
 router.post("/registrations/:id/review", RequireAuth, AsyncTryCatch(AuthController.reviewRegistration));
+router.post("/login", AsyncTryCatch(AuthController.initiateLogin));
 router.post("/login/initiate", AsyncTryCatch(AuthController.initiateLogin));
-router.post("/login/respond", AsyncTryCatch(AuthController.respondToChallenge));
+router.post("/login/otp/verify", AsyncTryCatch(AuthController.verifyLoginOtp));
+router.post("/login/otp/resend", AsyncTryCatch(AuthController.resendLoginOtp));
 router.post("/forgot-password", AsyncTryCatch(AuthController.forgotPassword));
 router.post("/forgot-password/confirm", AsyncTryCatch(AuthController.confirmForgotPassword));
 

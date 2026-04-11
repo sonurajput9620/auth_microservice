@@ -56,15 +56,31 @@ export const listRegistrationsQuerySchema = z.object({
 });
 
 export const loginInitiateSchema = z.object({
-  username: z.string().min(3),
+  email: z.string().email(),
   password: z.string().min(8)
 });
 
-export const loginRespondSchema = z.object({
-  username: z.string().min(3),
-  session: z.string().min(1),
-  challenge_name: z.string().min(1),
-  challenge_code: z.string().min(1)
+export const verifyLoginOtpSchema = z.object({
+  email: z.string().email(),
+  challenge_id: z.string().min(1),
+  cognito_session: z.string().min(1),
+  otp_code: z.string().length(6)
+});
+
+export const resendLoginOtpSchema = z.object({
+  email: z.string().email(),
+  challenge_id: z.string().min(1)
+});
+
+export const internalCreateLoginOtpSchema = z.object({
+  email: z.string().email(),
+  challengeId: z.string().min(1)
+});
+
+export const internalValidateLoginOtpSchema = z.object({
+  email: z.string().email(),
+  challengeId: z.string().min(1),
+  otp: z.string().length(6)
 });
 
 export const forgotPasswordSchema = z.object({
@@ -83,6 +99,9 @@ export type ConfirmSignUpPayload = z.infer<typeof confirmSignUpSchema>;
 export type ApproveRegistrationPayload = z.infer<typeof approveRegistrationSchema>;
 export type ListRegistrationsQuery = z.infer<typeof listRegistrationsQuerySchema>;
 export type LoginInitiatePayload = z.infer<typeof loginInitiateSchema>;
-export type LoginRespondPayload = z.infer<typeof loginRespondSchema>;
+export type VerifyLoginOtpPayload = z.infer<typeof verifyLoginOtpSchema>;
+export type ResendLoginOtpPayload = z.infer<typeof resendLoginOtpSchema>;
+export type InternalCreateLoginOtpPayload = z.infer<typeof internalCreateLoginOtpSchema>;
+export type InternalValidateLoginOtpPayload = z.infer<typeof internalValidateLoginOtpSchema>;
 export type ForgotPasswordPayload = z.infer<typeof forgotPasswordSchema>;
 export type ConfirmForgotPasswordPayload = z.infer<typeof confirmForgotPasswordSchema>;

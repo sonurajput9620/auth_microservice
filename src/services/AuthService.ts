@@ -1,10 +1,7 @@
 import {
   AdminGetUserCommand,
   AdminUpdateUserAttributesCommand,
-  AdminInitiateAuthCommand,
-  AdminRespondToAuthChallengeCommand,
   CognitoIdentityProviderClient,
-  ChallengeNameType,
   ConfirmForgotPasswordCommand,
   ConfirmSignUpCommand,
   ForgotPasswordCommand,
@@ -13,6 +10,9 @@ import {
 import { StatusCodes } from "http-status-codes";
 
 import { prisma } from "../prismaClient";
+import { CognitoService } from "./CognitoService";
+import { EmailService } from "./EmailService";
+import { OtpService } from "./otp.service";
 import { AppError } from "../utils/AppError";
 import { Logger } from "../utils/Logger";
 import {
@@ -20,10 +20,13 @@ import {
   ConfirmForgotPasswordPayload,
   ConfirmSignUpPayload,
   ForgotPasswordPayload,
+  InternalCreateLoginOtpPayload,
+  InternalValidateLoginOtpPayload,
   ListRegistrationsQuery,
   LoginInitiatePayload,
-  LoginRespondPayload,
+  ResendLoginOtpPayload,
   SignUpPayload,
+  VerifyLoginOtpPayload,
   UsernameAvailabilityPayload,
 } from "../validations/AuthValidation";
 
@@ -51,36 +54,6 @@ const normalizePhone = (phone: string): string => {
     return phone;
   }
   return `+${phone}`;
-};
-
-const mapChallengeCodeKey = (challengeName: string): string => {
-  const normalized = challengeName.toUpperCase();
-
-  if (normalized === "EMAIL_OTP") {
-    return "EMAIL_OTP_CODE";
-  }
-  if (normalized === "SOFTWARE_TOKEN_MFA") {
-    return "SOFTWARE_TOKEN_MFA_CODE";
-  }
-
-  throw new AppError(
-    StatusCodes.BAD_REQUEST,
-    "UnsupportedChallenge",
-    `Unsupported challenge type: ${challengeName}`,
-  );
-};
-
-const toChallengeNameType = (challengeName: string): ChallengeNameType => {
-  const normalized = challengeName.toUpperCase();
-  if (normalized === "SOFTWARE_TOKEN_MFA" || normalized === "EMAIL_OTP") {
-    return normalized as ChallengeNameType;
-  }
-
-  throw new AppError(
-    StatusCodes.BAD_REQUEST,
-    "UnsupportedChallenge",
-    `Unsupported challenge type: ${challengeName}`,
-  );
 };
 
 const toPublicTokens = (result?: {
@@ -661,6 +634,23 @@ export class AuthService {
     };
   }
 
+  private static async getLoginUserByEmail(email: string): Promise<LoginUser | null> {
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const user = await prisma.app_user.findFirst({
+      where: { email: normalizedEmail },
+      select: {
+        username: true
+      }
+    });
+
+    if (!user?.username) {
+      return null;
+    }
+
+    return this.getLoginUser(user.username);
+  }
+
   public static async checkUsernameAvailability(
     payload: UsernameAvailabilityPayload
   ): Promise<{
@@ -1146,29 +1136,31 @@ export class AuthService {
     }));
   }
 
-  public static async initiateLogin(payload: LoginInitiatePayload): Promise<
-    | {
-        challenge_required: false;
-        tokens: ReturnType<typeof toPublicTokens>;
-        user: LoginUser | null;
-      }
-    | {
-        challenge_required: true;
-        challenge_name: string;
-        session: string;
-        user: LoginUser | null;
-      }
-  > {
+  public static async initiateLogin(payload: LoginInitiatePayload): Promise<{
+    status: "OTP_REQUIRED";
+    challenge_id: string;
+    cognito_session: string;
+    otp: {
+      delivery_medium: "EMAIL";
+      destination: string;
+      expires_in: number;
+      max_attempts: number;
+    };
+    user_hint: {
+      email: string | null;
+      username: string;
+    };
+  }> {
     try {
       Logger.debug("InitiateLogin: Checking user status", {
-        username: payload.username,
+        email: payload.email,
       });
 
-      const user = await this.getLoginUser(payload.username);
+      const user = await this.getLoginUserByEmail(payload.email);
 
       if (!user || user.status !== true) {
         Logger.warn("InitiateLogin: User not approved or not active", {
-          username: payload.username,
+          email: payload.email,
           user_exists: !!user,
           user_status: user?.status,
         });
@@ -1180,130 +1172,208 @@ export class AuthService {
         );
       }
 
-      Logger.debug("InitiateLogin: Initiating Cognito auth", {
-        username: payload.username,
-      });
-
-      const response = await cognitoClient.send(
-        new AdminInitiateAuthCommand({
-          AuthFlow: "ADMIN_USER_PASSWORD_AUTH",
-          ClientId: COGNITO_CLIENT_ID,
-          UserPoolId: COGNITO_USER_POOL_ID,
-          AuthParameters: {
-            USERNAME: payload.username,
-            PASSWORD: payload.password,
-          },
-        }),
+      const cognito = await CognitoService.loginWithPassword(
+        payload.email.trim().toLowerCase(),
+        payload.password
       );
 
-      if (response.ChallengeName && response.Session) {
-        Logger.info("InitiateLogin: MFA challenge required", {
-          username: payload.username,
-          challenge_name: response.ChallengeName,
-        });
+      const challengeId = cognito.challengeParameters.challengeId?.trim();
 
-        return {
-          challenge_required: true,
-          challenge_name: response.ChallengeName,
-          session: response.Session,
-          user,
-        };
-      }
-
-      Logger.info("InitiateLogin: Login successful without MFA", {
-        username: payload.username,
-      });
-
-      return {
-        challenge_required: false,
-        tokens: toPublicTokens(response.AuthenticationResult),
-        user,
-      };
-    } catch (err: unknown) {
-      const error: any = err instanceof Error ? err : new Error(String(err));
-      let orginalError = error;
-      const errorName = getCognitoErrorName(err);
-      Logger.error("InitiateLogin: Login failed", error, {
-        username: payload.username,
-        error_name: errorName,
-      });
-
-      if (errorName && errorName !== "Error") {
-        throwLoginError(errorName);
-      } else if (orginalError.statusCode === 403) {
+      if (!challengeId) {
         throw new AppError(
-          StatusCodes.FORBIDDEN,
-          "UserNotFoundOrNotApproved",
-          "User is not found or not approved for login.",
+          StatusCodes.UNAUTHORIZED,
+          "ChallengeSessionMissing",
+          "Cognito did not return an OTP challenge identifier."
         );
       }
 
-      Logger.error("InitiateLogin: Unknown Cognito error", error, {
-        username: payload.username,
+      return {
+        status: "OTP_REQUIRED",
+        challenge_id: challengeId,
+        cognito_session: cognito.session,
+        otp: {
+          delivery_medium: "EMAIL",
+          destination: cognito.challengeParameters.destination ?? (user.email ?? payload.email),
+          expires_in: Number.parseInt(cognito.challengeParameters.expiresIn ?? "300", 10) || 300,
+          max_attempts: Number.parseInt(cognito.challengeParameters.maxAttempts ?? "3", 10) || 3
+        },
+        user_hint: {
+          email: user.email ?? null,
+          username: user.username
+        }
+      };
+    } catch (err: unknown) {
+      const error: any = err instanceof Error ? err : new Error(String(err));
+      const errorName = getCognitoErrorName(err);
+      Logger.error("InitiateLogin: Login failed", error, {
+        email: payload.email,
         error_name: errorName,
       });
 
+      if (err instanceof AppError) {
+        throw err;
+      }
+
       throw new AppError(
-        StatusCodes.UNAUTHORIZED,
+        StatusCodes.BAD_GATEWAY,
         "AuthenticationFailed",
-        "Authentication failed. Please verify your credentials and try again.",
+        "Authentication failed. Please verify your credentials and try again."
       );
     }
   }
 
-  public static async respondToChallenge(
-    payload: LoginRespondPayload,
+  public static async verifyLoginOtp(
+    payload: VerifyLoginOtpPayload,
   ): Promise<{
     tokens: ReturnType<typeof toPublicTokens>;
     user: LoginUser | null;
   }> {
     try {
-      Logger.debug("RespondToChallenge: Processing challenge response", {
-        username: payload.username,
-        challenge_name: payload.challenge_name,
+      Logger.debug("VerifyLoginOtp: Processing login OTP", {
+        email: payload.email,
+        challenge_id: payload.challenge_id,
       });
 
-      const challengeKey = mapChallengeCodeKey(payload.challenge_name);
-
-      const response = await cognitoClient.send(
-        new AdminRespondToAuthChallengeCommand({
-          ClientId: COGNITO_CLIENT_ID,
-          UserPoolId: COGNITO_USER_POOL_ID,
-          ChallengeName: toChallengeNameType(payload.challenge_name),
-          Session: payload.session,
-          ChallengeResponses: {
-            USERNAME: payload.username,
-            [challengeKey]: payload.challenge_code,
-          },
-        }),
+      const verification = await OtpService.verifyLoginOtp(
+        payload.email,
+        payload.challenge_id,
+        payload.otp_code
       );
 
-      const user = await this.getLoginUser(payload.username);
+      if (!verification.valid) {
+        throw new AppError(
+          StatusCodes.BAD_REQUEST,
+          "InvalidLoginOtp",
+          "Invalid login OTP.",
+          { attempts_remaining: verification.attempts_remaining }
+        );
+      }
 
-      Logger.info("RespondToChallenge: Challenge response successful", {
-        username: payload.username,
-        challenge_name: payload.challenge_name,
+      const response = await CognitoService.respondToCustomChallenge({
+        email: payload.email,
+        session: payload.cognito_session,
+        otpCode: payload.otp_code
+      });
+
+      await OtpService.consumeOtp(payload.challenge_id);
+
+      const user = await this.getLoginUserByEmail(payload.email);
+
+      Logger.info("VerifyLoginOtp: Login successful after custom OTP", {
+        email: payload.email,
+        challenge_id: payload.challenge_id,
       });
 
       return {
-        tokens: toPublicTokens(response.AuthenticationResult),
+        tokens: response.tokens,
         user: user || null,
       };
     } catch (err: unknown) {
       const error = err instanceof Error ? err : new Error(String(err));
-      const errorName = getCognitoErrorName(err);
       Logger.error(
-        "RespondToChallenge: Failed to respond to challenge",
+        "VerifyLoginOtp: Failed to verify login OTP",
         error,
         {
-          username: payload.username,
-          challenge_name: payload.challenge_name,
-          error_name: errorName,
+          email: payload.email,
+          challenge_id: payload.challenge_id,
         },
       );
 
-      if (errorName) {
-        throwLoginError(errorName);
+      if (err instanceof AppError) {
+        throw err;
+      }
+
+      throw new AppError(
+        StatusCodes.BAD_GATEWAY,
+        "LoginOtpVerificationFailed",
+        "Failed to verify login OTP."
+      );
+    }
+  }
+
+  public static async resendLoginOtp(
+    payload: ResendLoginOtpPayload,
+  ): Promise<{
+    status: "OTP_REQUIRED";
+    challenge_id: string;
+    otp: {
+      delivery_medium: "EMAIL";
+      destination: string;
+      expires_in: number;
+      max_attempts: number;
+    };
+  }> {
+    const regenerated = await OtpService.resendLoginOtp(
+      payload.email,
+      payload.challenge_id
+    );
+
+    const delivery = await EmailService.sendLoginOtp({
+      email: payload.email.trim().toLowerCase(),
+      otp: regenerated.otp,
+      expiresAt: regenerated.expiresAt
+    });
+
+    return {
+      status: "OTP_REQUIRED",
+      challenge_id: regenerated.challengeId,
+      otp: {
+        delivery_medium: delivery.delivery_medium,
+        destination: delivery.destination,
+        expires_in: 300,
+        max_attempts: regenerated.maxAttempts
+      }
+    };
+  }
+
+  public static async createInternalLoginOtp(
+    payload: InternalCreateLoginOtpPayload
+  ): Promise<{
+    challengeId: string;
+    destination: string;
+    expiresIn: number;
+    maxAttempts: number;
+  }> {
+    const created = await OtpService.createLoginOtp(payload.email, payload.challengeId);
+    const delivery = await EmailService.sendLoginOtp({
+      email: payload.email.trim().toLowerCase(),
+      otp: created.otp,
+      expiresAt: created.expiresAt
+    });
+
+    return {
+      challengeId: created.challengeId,
+      destination: delivery.destination,
+      expiresIn: 300,
+      maxAttempts: created.maxAttempts
+    };
+  }
+
+  public static async validateInternalLoginOtp(
+    payload: InternalValidateLoginOtpPayload
+  ): Promise<{ valid: boolean }> {
+    try {
+      const result = await OtpService.verifyLoginOtp(
+        payload.email,
+        payload.challengeId,
+        payload.otp
+      );
+
+      return {
+        valid: result.valid
+      };
+    } catch (error) {
+      if (error instanceof AppError) {
+        if (
+          error.errorCode === "LoginOtpExpired" ||
+          error.errorCode === "LoginOtpAlreadyUsed" ||
+          error.errorCode === "LoginOtpAttemptsExceeded" ||
+          error.errorCode === "LoginOtpNotFound"
+        ) {
+          return { valid: false };
+        }
+
+        throw error;
       }
 
       throw error;

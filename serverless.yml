@@ -1,0 +1,66 @@
+service: auth-cognito-triggers
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: ap-south-1
+  timeout: 15
+  memorySize: 256
+  versionFunctions: false
+  deploymentMethod: direct
+  environment:
+    AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
+    NODE_ENV: ${env:NODE_ENV, 'production'}
+    LOG_LEVEL: ${env:LOG_LEVEL, 'info'}
+    INTERNAL_AUTH_BASE_URL: ${env:INTERNAL_AUTH_BASE_URL}
+    INTERNAL_AUTH_API_KEY: ${env:INTERNAL_AUTH_API_KEY}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+          Resource: "*"
+
+package:
+  individually: true
+  patterns:
+    - '!dist/**'
+    - '!docs/**'
+    - '!tests/**'
+    - '!prisma/**'
+    - '!.git/**'
+    - '!*.md'
+
+functions:
+  defineAuthChallenge:
+    handler: src/lambdas/cognito-custom-auth/DefineAuthChallenge.handler
+    description: Cognito DefineAuthChallenge trigger for custom email OTP login
+
+  createAuthChallenge:
+    handler: src/lambdas/cognito-custom-auth/CreateAuthChallenge.handler
+    description: Cognito CreateAuthChallenge trigger for custom email OTP login
+
+  verifyAuthChallengeResponse:
+    handler: src/lambdas/cognito-custom-auth/VerifyAuthChallengeResponse.handler
+    description: Cognito VerifyAuthChallengeResponse trigger for custom email OTP login
+
+plugins:
+  - serverless-esbuild
+  - serverless-offline
+
+custom:
+  esbuild:
+    bundle: true
+    minify: false
+    sourcemap: true
+    target: node20
+    platform: node
+    concurrency: 10
+    packager: npm
+    packagePath: package.json
+  serverless-offline:
+    httpPort: 3001
+    lambdaPort: 3002
