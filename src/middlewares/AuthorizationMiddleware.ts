@@ -404,9 +404,9 @@ const buildAuthContext = (payload: Record<string, unknown>, source: TokenSource)
 };
 
 const isAuthDisabled = (): boolean => {
-  if (process.env.NODE_ENV === "production") {
-    return false;
-  }
+  // if (process.env.NODE_ENV === "production") {
+  //   return false;
+  // }
 
   return process.env.DISABLE_AUTH === "true";
 };
