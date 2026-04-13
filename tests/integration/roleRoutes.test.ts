@@ -307,4 +307,40 @@ describe("Role Routes", () => {
 
     expect(response.status).toBe(200);
   });
+
+  it("POST /api/v1/roles/permissions returns a flat permission array for a numeric role id", async () => {
+    vi.spyOn(RoleRepository.roles, "findFirst").mockResolvedValue({
+      id: 101,
+      status: role_status_enum.ACTIVE
+    } as never);
+    vi.spyOn(RoleRepository.rolePermissions, "findMany").mockResolvedValue(groupedPermissionRows as never);
+
+    const app = createApp();
+    const response = await request(app)
+      .post("/api/v1/roles/permissions")
+      .set("Authorization", viewerAuthHeader())
+      .send({ roleId: 101 });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data).toEqual(["users-edit-role"]);
+  });
+
+  it("GET /api/v1/roles/permissions returns a flat permission array for roleId query", async () => {
+    vi.spyOn(RoleRepository.roles, "findFirst").mockResolvedValue({
+      id: 101,
+      status: role_status_enum.ACTIVE
+    } as never);
+    vi.spyOn(RoleRepository.rolePermissions, "findMany").mockResolvedValue(groupedPermissionRows as never);
+
+    const app = createApp();
+    const response = await request(app)
+      .get("/api/v1/roles/permissions")
+      .query({ roleId: "101" })
+      .set("Authorization", viewerAuthHeader());
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data).toEqual(["users-edit-role"]);
+  });
 });

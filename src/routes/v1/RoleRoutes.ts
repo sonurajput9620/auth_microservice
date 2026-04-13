@@ -21,6 +21,18 @@ router.post(
   RequireAnyPermission("role-management.view", "roles.read"),
   AsyncTryCatch(RoleController.compareRoles)
 );
+router.post(
+  "/permissions",
+  RequireAuth,
+  RequireAnyPermission("role-management.view", "roles.read"),
+  AsyncTryCatch(RoleController.getPermissionsByRole)
+);
+router.get(
+  "/permissions",
+  RequireAuth,
+  RequireAnyPermission("role-management.view", "roles.read"),
+  AsyncTryCatch(RoleController.getPermissionsByRoleQuery)
+);
 router.get(
   "/:roleId",
   RequireAuth,

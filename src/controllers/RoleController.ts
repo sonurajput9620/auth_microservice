@@ -7,6 +7,7 @@ import {
   createRoleSchema,
   duplicateRoleSchema,
   listRolesQuerySchema,
+  rolePermissionsLookupSchema,
   roleIdParamSchema,
   updateRoleSchema
 } from "../validations/RoleValidation";
@@ -54,5 +55,17 @@ export class RoleController {
     const payload = compareRolesSchema.parse(req.body);
     const result = await RoleService.compareRoles(payload.roleAId, payload.roleBId);
     ApiResponse.ok(res, "Roles compared successfully.", result);
+  }
+
+  public static async getPermissionsByRole(req: Request, res: Response): Promise<void> {
+    const payload = rolePermissionsLookupSchema.parse(req.body);
+    const result = await RoleService.getPermissionsByRoleId(payload.roleId);
+    ApiResponse.ok(res, "Role permissions fetched successfully.", result);
+  }
+
+  public static async getPermissionsByRoleQuery(req: Request, res: Response): Promise<void> {
+    const payload = rolePermissionsLookupSchema.parse(req.query);
+    const result = await RoleService.getPermissionsByRoleId(payload.roleId);
+    ApiResponse.ok(res, "Role permissions fetched successfully.", result);
   }
 }

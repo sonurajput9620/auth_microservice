@@ -9,6 +9,7 @@ import { AppError } from "../utils/AppError";
 import {
   CreateRolePayload,
   DuplicateRolePayload,
+  RolePermissionsLookupPayload,
   UpdateRolePayload
 } from "../validations/RoleValidation";
 
@@ -419,6 +420,68 @@ export class RoleService {
     );
 
     return mapRoleDto(role, assignedUsersCount, permissionMap.get(role.id) ?? []);
+  }
+
+  public static async getPermissionsByRoleId(
+    roleId: RolePermissionsLookupPayload["roleId"]
+  ): Promise<string[]> {
+    const role = await RoleRepository.roles.findFirst({
+      where: {
+        id: roleId,
+        is_deleted: false
+      },
+      select: {
+        id: true,
+        status: true
+      }
+    });
+
+    if (!role) {
+      throw new AppError(StatusCodes.NOT_FOUND, "ROLE_NOT_FOUND", "Role not found.");
+    }
+
+    const permissionRows = await RoleRepository.rolePermissions.findMany({
+      where: {
+        role_id: role.id,
+        permission_sub_features: {
+          is_active: true,
+          permission_features: {
+            is_active: true
+          }
+        }
+      },
+      select: {
+        role_id: true,
+        is_enabled: true,
+        permission_sub_features: {
+          select: {
+            sub_feature_key: true,
+            sort_order: true,
+            sub_feature_name: true,
+            permission_features: {
+              select: {
+                feature_key: true,
+                feature_group: true,
+                sort_order: true,
+                feature_name: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (role.status !== role_status_enum.ACTIVE) {
+      return [];
+    }
+
+    return Array.from(
+      new Set(
+        permissionRows
+          .filter((row) => row.is_enabled)
+          .map((row) => row.permission_sub_features.sub_feature_key)
+      )
+    ).sort((left, right) => left.localeCompare(right));
   }
 
   public static async createRole(payload: CreateRolePayload): Promise<RoleDto> {

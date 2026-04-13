@@ -40,8 +40,13 @@ export const compareRolesSchema = z.object({
   roleBId: z.string().min(1)
 });
 
+export const rolePermissionsLookupSchema = z.object({
+  roleId: z.coerce.number().int().positive()
+});
+
 export type ListRolesQuery = z.infer<typeof listRolesQuerySchema>;
 export type CreateRolePayload = z.infer<typeof createRoleSchema>;
 export type UpdateRolePayload = z.infer<typeof updateRoleSchema>;
 export type DuplicateRolePayload = z.infer<typeof duplicateRoleSchema>;
 export type CompareRolesPayload = z.infer<typeof compareRolesSchema>;
+export type RolePermissionsLookupPayload = z.infer<typeof rolePermissionsLookupSchema>;
