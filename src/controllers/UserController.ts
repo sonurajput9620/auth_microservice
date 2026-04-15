@@ -6,6 +6,7 @@ import {
   assignUserRoleSchema,
   createUserSchema,
   listUsersQuerySchema,
+  updateUserStatusSchema,
   userIdParamSchema
 } from "../validations/UserValidation";
 
@@ -28,5 +29,16 @@ export class UserController {
     const payload = assignUserRoleSchema.parse(req.body);
     const user = await UserService.assignRole(userId, payload);
     ApiResponse.ok(res, "User role updated successfully.", user);
+  }
+
+  public static async updateStatus(req: Request, res: Response): Promise<void> {
+    const { userId } = userIdParamSchema.parse(req.params);
+    const payload = updateUserStatusSchema.parse(req.body);
+    const user = await UserService.updateStatus(userId, payload);
+    ApiResponse.ok(
+      res,
+      `User ${payload.status ? "enabled" : "disabled"} successfully.`,
+      user
+    );
   }
 }

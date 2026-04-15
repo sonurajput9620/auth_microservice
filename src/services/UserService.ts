@@ -4,7 +4,12 @@ import { StatusCodes } from "http-status-codes";
 import { RoleRepository } from "../repositories/RoleRepository";
 import { UserRepository } from "../repositories/UserRepository";
 import { AppError } from "../utils/AppError";
-import { AssignUserRolePayload, CreateUserPayload, ListUsersQuery } from "../validations/UserValidation";
+import {
+  AssignUserRolePayload,
+  CreateUserPayload,
+  ListUsersQuery,
+  UpdateUserStatusPayload
+} from "../validations/UserValidation";
 
 export interface UserDto {
   userId: number;
@@ -138,6 +143,48 @@ export class UserService {
       },
       data: {
         role_id: roleId
+      },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        first_name: true,
+        last_name: true,
+        status: true,
+        roles: {
+          select: {
+            role_uid: true
+          }
+        }
+      }
+    });
+
+    return toUserDto(updated);
+  }
+
+  public static async updateStatus(
+    userId: number,
+    payload: UpdateUserStatusPayload
+  ): Promise<UserDto> {
+    const user = await UserRepository.appUser.findUnique({
+      where: {
+        id: userId
+      },
+      select: {
+        id: true
+      }
+    });
+
+    if (!user) {
+      throw new AppError(StatusCodes.NOT_FOUND, "USER_NOT_FOUND", "User not found.");
+    }
+
+    const updated = await UserRepository.appUser.update({
+      where: {
+        id: userId
+      },
+      data: {
+        status: payload.status
       },
       select: {
         id: true,

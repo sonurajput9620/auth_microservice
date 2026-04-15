@@ -1086,7 +1086,7 @@ export class AuthService {
       });
 
       const existingRegistration = await prisma.register_user.findUnique({
-        where: { username: payload.username },
+        where: { email: payload.email },
       });
 
       if (existingRegistration) {
@@ -1096,6 +1096,7 @@ export class AuthService {
             first_name: payload.first_name,
             last_name: payload.last_name,
             email: payload.email,
+            username: payload.username,
             phone: normalizePhone(payload.phone),
           },
         });
@@ -1495,6 +1496,7 @@ export class AuthService {
             role_id: true,
             site_id: true,
             corporation_id: true,
+            status: true,
           },
         },
       },
@@ -1532,6 +1534,7 @@ export class AuthService {
       created_at: registration.created_at.toISOString(),
       updated_at: registration.updated_at.toISOString(),
       app_user_id: registration.app_user?.id ?? null,
+      app_user_status: registration.app_user?.status ?? null,
       role_id:
         typeof registration.app_user?.role_id === "number"
           ? String(registration.app_user.role_id)

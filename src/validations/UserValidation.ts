@@ -20,6 +20,11 @@ export const assignUserRoleSchema = z.object({
   roleId: z.string().min(1).nullable()
 });
 
+export const updateUserStatusSchema = z.object({
+  status: z.boolean()
+});
+
 export type CreateUserPayload = z.infer<typeof createUserSchema>;
 export type ListUsersQuery = z.infer<typeof listUsersQuerySchema>;
 export type AssignUserRolePayload = z.infer<typeof assignUserRoleSchema>;
+export type UpdateUserStatusPayload = z.infer<typeof updateUserStatusSchema>;

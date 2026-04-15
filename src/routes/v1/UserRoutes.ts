@@ -22,5 +22,11 @@ router.patch(
   RequireAnyPermission("role-management.manage", "roles.write"),
   AsyncTryCatch(UserController.assignRole)
 );
+router.patch(
+  "/:userId/status",
+  RequireAuth,
+  RequireAnyPermission("role-management.manage", "roles.write", "users-disable"),
+  AsyncTryCatch(UserController.updateStatus)
+);
 
 export default router;
