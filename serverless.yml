@@ -8,14 +8,17 @@ provider:
   timeout: 29
   versionFunctions: false
 
-  # Uncomment if the database is reachable only inside a VPC.
-  # vpc:
-  #   securityGroupIds:
-  #     - sg-xxxxxxxxxxxxxxxxx
-  #   subnetIds:
-  #     - subnet-xxxxxxxxxxxxxxxxx
-  #     - subnet-yyyyyyyyyyyyyyyyy
-
+  vpc:
+    securityGroupIds:
+      - sg-0ff053c33a427eee1
+    subnetIds:
+      - subnet-012c114ccd77cb819
+      - subnet-082655576b52cc73d
+      - subnet-02daf96f740ffc4ed
+      # - subnet-6ca4bc04
+      # - subnet-afb4fde3
+      # - subnet-0341d278
+  
   environment:
     AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
     NODE_ENV: ${env:NODE_ENV, 'production'}
