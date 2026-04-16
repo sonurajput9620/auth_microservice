@@ -14,6 +14,7 @@ provider:
           Action:
             - cognito-idp:AdminGetUser
             - cognito-idp:AdminInitiateAuth
+            - cognito-idp:AdminRespondToAuthChallenge
             - cognito-idp:AdminUpdateUserAttributes
             - cognito-idp:SignUp
             - cognito-idp:ConfirmSignUp
