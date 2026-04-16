@@ -157,7 +157,10 @@ const getExpectedCognitoIssuer = (): string | null => {
     return process.env.COGNITO_ISSUER.trim();
   }
 
-  const region = process.env.COGNITO_REGION?.trim() || process.env.AWS_DEFAULT_REGION?.trim();
+  const region =
+    process.env.COGNITO_REGION?.trim() ||
+    process.env.AWS_REGION?.trim() ||
+    process.env.AWS_DEFAULT_REGION?.trim();
   const userPoolId = process.env.COGNITO_USER_POOL_ID?.trim();
   if (!region || !userPoolId) {
     return null;

@@ -42,7 +42,10 @@ const getEnv = (key: string): string => {
 
 const COGNITO_CLIENT_ID = getEnv("COGNITO_CLIENT_ID");
 const COGNITO_USER_POOL_ID = getEnv("COGNITO_USER_POOL_ID");
-const AWS_REGION = getEnv("AWS_DEFAULT_REGION");
+const AWS_REGION =
+  process.env.AWS_REGION?.trim() ||
+  process.env.AWS_DEFAULT_REGION?.trim() ||
+  "ap-south-1";
 const cognitoClient = new CognitoIdentityProviderClient({
   region: AWS_REGION,
 });
