@@ -264,7 +264,10 @@ const isAwsCredentialsError = (errorName: string | undefined): boolean =>
   errorName === "InvalidSignatureException" ||
   errorName === "ExpiredTokenException";
 
-const throwLoginError = (errorName: string | undefined): never => {
+const throwLoginError = (
+  errorName: string | undefined,
+  errorMessage?: string,
+): never => {
   if (errorName === "NotAuthorizedException") {
     throw new AppError(
       StatusCodes.UNAUTHORIZED,
@@ -310,6 +313,46 @@ const throwLoginError = (errorName: string | undefined): never => {
       StatusCodes.INTERNAL_SERVER_ERROR,
       "CognitoClientMisconfigured",
       "Cognito app client auth flow is not enabled for this login path.",
+    );
+  }
+
+  if (errorName === "AccessDeniedException") {
+    throw new AppError(
+      StatusCodes.INTERNAL_SERVER_ERROR,
+      "CognitoAccessDenied",
+      "Backend Lambda role is not authorized to access the configured Cognito user pool.",
+    );
+  }
+
+  if (errorName === "ResourceNotFoundException") {
+    throw new AppError(
+      StatusCodes.INTERNAL_SERVER_ERROR,
+      "CognitoResourceNotFound",
+      "Configured Cognito user pool or app client was not found.",
+    );
+  }
+
+  if (
+    errorName === "TooManyRequestsException" ||
+    errorName === "TooManyFailedAttemptsException" ||
+    errorName === "LimitExceededException"
+  ) {
+    throw new AppError(
+      StatusCodes.TOO_MANY_REQUESTS,
+      "TooManyRequests",
+      "Too many login attempts. Please try again later.",
+    );
+  }
+
+  if (
+    errorName === "UserLambdaValidationException" ||
+    errorName === "UnexpectedLambdaException" ||
+    errorName === "InvalidLambdaResponseException"
+  ) {
+    throw new AppError(
+      StatusCodes.BAD_GATEWAY,
+      "CognitoTriggerFailed",
+      errorMessage || "A Cognito trigger failed while processing login.",
     );
   }
 
@@ -1642,7 +1685,7 @@ export class AuthService {
       });
 
       if (errorName && errorName !== "Error") {
-        throwLoginError(errorName);
+        throwLoginError(errorName, error.message);
       } else if (orginalError.statusCode === 403) {
         throw new AppError(
           StatusCodes.FORBIDDEN,
