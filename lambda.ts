@@ -14,6 +14,8 @@ const allowedOrigins = [
   "https://staging.pure.bi",
   "https://app.pure.bi",
   "https://test.pure.bi",
+  "http://localhost:8080",
+  "https://purifai.tech"
 ];
 
 let cachedHandler:
