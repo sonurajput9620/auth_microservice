@@ -1484,11 +1484,14 @@ export class AuthService {
     query: ListRegistrationsQuery,
   ): Promise<RegistrationListItem[]> {
     const registrations = await prisma.register_user.findMany({
-      where: query.status
-        ? {
-            status: query.status,
-          }
-        : undefined,
+      where: {
+        email_verified: true,
+        ...(query.status
+          ? {
+              status: query.status,
+            }
+          : {}),
+      },
       include: {
         app_user: {
           select: {

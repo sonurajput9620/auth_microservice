@@ -1,7 +1,10 @@
 import { Request, Response } from "express";
+import { StatusCodes } from "http-status-codes";
 
+import { prisma } from "../prismaClient";
 import { AuthService } from "../services/AuthService";
 import { ApiResponse } from "../utils/ApiResponse";
+import { AppError } from "../utils/AppError";
 import { Logger } from "../utils/Logger";
 import {
   approveRegistrationSchema,
@@ -34,7 +37,32 @@ export class AuthController {
   public static async signUp(req: Request, res: Response): Promise<void> {
     const payload = signUpSchema.parse(req.body);
     Logger.debug("SignUp initiated", { username: payload.username });
-    
+
+    const [existingRegistration, existingAppUser] = await Promise.all([
+      prisma.register_user.findUnique({
+        where: { email: payload.email },
+        select: { id: true }
+      }),
+      prisma.app_user.findFirst({
+        where: { email: payload.email },
+        select: { id: true }
+      })
+    ]);
+
+    if (existingRegistration || existingAppUser) {
+      Logger.warn("SignUp blocked because email is already registered", {
+        username: payload.username,
+        email: payload.email,
+        source: existingRegistration ? "register_user" : "app_user"
+      });
+
+      throw new AppError(
+        StatusCodes.CONFLICT,
+        "UserAlreadyRegistered",
+        "User already registered."
+      );
+    }
+
     const data = await AuthService.signUp(payload);
 
     Logger.info("User signed up successfully", {
