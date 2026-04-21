@@ -16,7 +16,10 @@ const getEnv = (key: string, defaultValue?: string): string => {
   return value || defaultValue || "";
 };
 
-const AWS_REGION = getEnv("AWS_DEFAULT_REGION");
+const AWS_REGION =
+  process.env.AWS_REGION?.trim() ||
+  process.env.AWS_DEFAULT_REGION?.trim() ||
+  "ap-south-1";
 const SMS_MOCK_MODE = getEnv("SMS_MOCK_MODE", "true") === "true";
 const snsClient = new SNSClient({ region: AWS_REGION });
 

@@ -16,6 +16,9 @@ export class Logger {
   private static readonly LOG_DIR = process.env.LOG_DIR || "./logs";
   private static readonly NODE_ENV = process.env.NODE_ENV || "development";
   private static readonly LOG_LEVEL = process.env.LOG_LEVEL || "info";
+  private static readonly IS_LAMBDA =
+    Boolean(process.env.AWS_LAMBDA_FUNCTION_NAME) ||
+    Boolean(process.env.AWS_EXECUTION_ENV);
 
   private static readonly LOG_LEVELS = {
     debug: 0,
@@ -63,18 +66,43 @@ export class Logger {
 
     const formattedLog = this.formatLogEntry(entry);
 
-    // Console output (always in development)
-    if (this.NODE_ENV === "development") {
-      // eslint-disable-next-line no-console
-      console.log(formattedLog);
+    // Lambda and other containerized runtimes should log to stdout/stderr.
+    if (this.NODE_ENV === "development" || this.IS_LAMBDA) {
+      if (level === "error") {
+        // eslint-disable-next-line no-console
+        console.error(formattedLog);
+      } else if (level === "warn") {
+        // eslint-disable-next-line no-console
+        console.warn(formattedLog);
+      } else {
+        // eslint-disable-next-line no-console
+        console.log(formattedLog);
+      }
+    }
+
+    if (this.IS_LAMBDA) {
+      return;
     }
 
     // File output
     if (this.NODE_ENV !== "development" || level === "error") {
-      this.ensureLogDir();
-      const logFile = path.join(this.LOG_DIR, `${level}-${new Date().toISOString().split("T")[0]}.log`);
-      
-      fs.appendFileSync(logFile, formattedLog + "\n", "utf-8");
+      try {
+        this.ensureLogDir();
+        const logFile = path.join(this.LOG_DIR, `${level}-${new Date().toISOString().split("T")[0]}.log`);
+
+        fs.appendFileSync(logFile, formattedLog + "\n", "utf-8");
+      } catch (writeError) {
+        // eslint-disable-next-line no-console
+        console.error(
+          `[${timestamp}] ERROR  Failed to write log file | ${JSON.stringify({
+            log_dir: this.LOG_DIR,
+            write_error:
+              writeError instanceof Error ? writeError.message : String(writeError),
+          })}`
+        );
+        // eslint-disable-next-line no-console
+        console.log(formattedLog);
+      }
     }
   }
 

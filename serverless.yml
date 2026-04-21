@@ -7,21 +7,38 @@ provider:
   memorySize: 512
   timeout: 29
   versionFunctions: false
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - cognito-idp:AdminGetUser
+            - cognito-idp:AdminInitiateAuth
+            - cognito-idp:AdminRespondToAuthChallenge
+            - cognito-idp:AdminUpdateUserAttributes
+            - cognito-idp:SignUp
+            - cognito-idp:ConfirmSignUp
+            - cognito-idp:ForgotPassword
+            - cognito-idp:ConfirmForgotPassword
+          Resource:
+            - arn:aws:cognito-idp:${self:provider.region}:${aws:accountId}:userpool/${env:COGNITO_USER_POOL_ID}
 
-  # Uncomment if the database is reachable only inside a VPC.
-  # vpc:
-  #   securityGroupIds:
-  #     - sg-xxxxxxxxxxxxxxxxx
-  #   subnetIds:
-  #     - subnet-xxxxxxxxxxxxxxxxx
-  #     - subnet-yyyyyyyyyyyyyyyyy
-
+  vpc:
+    securityGroupIds:
+      - sg-0ff053c33a427eee1
+    subnetIds:
+      - subnet-012c114ccd77cb819
+      - subnet-082655576b52cc73d
+      - subnet-02daf96f740ffc4ed
+      # - subnet-6ca4bc04
+      # - subnet-afb4fde3
+      # - subnet-0341d278
+  
   environment:
     AWS_NODEJS_CONNECTION_REUSE_ENABLED: 1
     NODE_ENV: ${env:NODE_ENV, 'production'}
     PORT: ${env:PORT, '4100'}
     DATABASE_URL: ${env:DATABASE_URL}
-    AWS_DEFAULT_REGION: ${env:AWS_DEFAULT_REGION}
     COGNITO_USER_POOL_ID: ${env:COGNITO_USER_POOL_ID}
     COGNITO_CLIENT_ID: ${env:COGNITO_CLIENT_ID}
     AUTH_SESSION_SECRET: ${env:AUTH_SESSION_SECRET}
@@ -47,6 +64,8 @@ provider:
         - https://staging.pure.bi
         - https://app.pure.bi
         - https://test.pure.bi
+        - http://localhost:8080
+        - https://purifai.tech
       allowedHeaders:
         - Content-Type
         - Authorization
