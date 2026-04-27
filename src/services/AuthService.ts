@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import {
+  AdminDeleteUserCommand,
   AdminGetUserCommand,
   AdminUpdateUserAttributesCommand,
   AdminInitiateAuthCommand,
@@ -449,6 +450,21 @@ const throwConfirmForgotPasswordError = (err: unknown): never => {
   );
 };
 
+const isRecoverablePendingRegistration = (
+  registration:
+    | {
+        email_verified: boolean;
+        status: string;
+        app_user?: { id: number } | null;
+      }
+    | null
+    | undefined,
+): boolean =>
+  !!registration &&
+  registration.email_verified === false &&
+  registration.status === "PENDING_APPROVAL" &&
+  !registration.app_user;
+
 type LoginSite = {
   site_id: number;
   site_name: string | null;
@@ -494,6 +510,7 @@ type RegistrationListItem = {
   created_at: string;
   updated_at: string;
   app_user_id: number | null;
+  app_user_status: boolean | null;
   role_id: string | null;
   role_name: string | null;
   site_id: number | null;
@@ -514,6 +531,64 @@ type LoginChallengeResponse = {
 };
 
 export class AuthService {
+  private static async deleteCognitoUser(
+    username: string,
+    operation: "DeleteRegistration" | "SignUp" = "DeleteRegistration",
+  ): Promise<void> {
+    try {
+      await cognitoClient.send(
+        new AdminDeleteUserCommand({
+          UserPoolId: COGNITO_USER_POOL_ID,
+          Username: username,
+        }),
+      );
+    } catch (err: unknown) {
+      const errorName = getCognitoErrorName(err);
+      if (errorName === "UserNotFoundException") {
+        Logger.warn(`${operation}: Cognito user not found during delete`, {
+          username,
+        });
+        return;
+      }
+
+      if (isAwsCredentialsError(errorName)) {
+        throw new AppError(
+          StatusCodes.INTERNAL_SERVER_ERROR,
+          "AwsCredentialsInvalid",
+          "Backend AWS credentials for Cognito are invalid or expired.",
+        );
+      }
+
+      if (errorName === "AccessDeniedException") {
+        throw new AppError(
+          StatusCodes.INTERNAL_SERVER_ERROR,
+          "CognitoAccessDenied",
+          "Backend Lambda role is not authorized to access the configured Cognito user pool.",
+        );
+      }
+
+      if (errorName === "ResourceNotFoundException") {
+        throw new AppError(
+          StatusCodes.INTERNAL_SERVER_ERROR,
+          "CognitoResourceNotFound",
+          "Configured Cognito user pool was not found.",
+        );
+      }
+
+      const error = err instanceof Error ? err : new Error(String(err));
+      Logger.error(`${operation}: Failed to delete Cognito user`, error, {
+        username,
+        error_name: errorName,
+      });
+
+      throw new AppError(
+        StatusCodes.BAD_GATEWAY,
+        "CognitoDeleteFailed",
+        "Failed to delete user from Cognito.",
+      );
+    }
+  }
+
   private static async mapRoleNamesByIds(roleIds: number[]): Promise<Map<number, string>> {
     const uniqueRoleIds = Array.from(new Set(roleIds));
     if (uniqueRoleIds.length === 0) {
@@ -1039,6 +1114,7 @@ export class AuthService {
     username: string;
     available: boolean;
     source: "database" | "cognito";
+    recoverable: boolean;
   }> {
     const username = payload.username.trim();
 
@@ -1049,30 +1125,61 @@ export class AuthService {
       }),
       prisma.register_user.findUnique({
         where: { username },
-        select: { id: true },
+        select: {
+          id: true,
+          email_verified: true,
+          status: true,
+          app_user: {
+            select: {
+              id: true,
+            },
+          },
+        },
       }),
     ]);
 
-    if (existingAppUser || existingRegistration) {
+    if (existingAppUser) {
       return {
         username,
         available: false,
         source: "database",
+        recoverable: false,
+      };
+    }
+
+    const recoverableRegistration = isRecoverablePendingRegistration(existingRegistration);
+
+    if (existingRegistration && !recoverableRegistration) {
+      return {
+        username,
+        available: false,
+        source: "database",
+        recoverable: false,
       };
     }
 
     try {
-      await cognitoClient.send(
+      const cognitoUser = await cognitoClient.send(
         new AdminGetUserCommand({
           UserPoolId: COGNITO_USER_POOL_ID,
           Username: username,
         })
       );
 
+      if (cognitoUser.UserStatus?.toUpperCase() === "UNCONFIRMED") {
+        return {
+          username,
+          available: true,
+          source: "cognito",
+          recoverable: true,
+        };
+      }
+
       return {
         username,
         available: false,
         source: "cognito",
+        recoverable: false,
       };
     } catch (err: unknown) {
       const errorName = getCognitoErrorName(err);
@@ -1081,6 +1188,7 @@ export class AuthService {
           username,
           available: true,
           source: "cognito",
+          recoverable: recoverableRegistration,
         };
       }
 
@@ -1105,45 +1213,106 @@ export class AuthService {
   }> {
     try {
       const fullName = `${payload.first_name} ${payload.last_name}`.trim();
+      const normalizedPhone = normalizePhone(payload.phone);
+      const createCognitoUser = () =>
+        cognitoClient.send(
+          new SignUpCommand({
+            ClientId: COGNITO_CLIENT_ID,
+            Username: payload.username,
+            Password: payload.password,
+            UserAttributes: [
+              { Name: "email", Value: payload.email },
+              { Name: "given_name", Value: payload.first_name },
+              { Name: "family_name", Value: payload.last_name },
+              { Name: "preferred_username", Value: payload.username },
+              { Name: "name", Value: fullName || payload.username },
+              { Name: "phone_number", Value: normalizedPhone },
+            ],
+          }),
+        );
+
       Logger.debug("SignUp: Creating user in Cognito", {
         username: payload.username,
         email: payload.email,
       });
 
-      const response = await cognitoClient.send(
-        new SignUpCommand({
-          ClientId: COGNITO_CLIENT_ID,
-          Username: payload.username,
-          Password: payload.password,
-          UserAttributes: [
-            { Name: "email", Value: payload.email },
-            { Name: "given_name", Value: payload.first_name },
-            { Name: "family_name", Value: payload.last_name },
-            { Name: "preferred_username", Value: payload.username },
-            { Name: "name", Value: fullName || payload.username },
-            { Name: "phone_number", Value: normalizePhone(payload.phone) },
-          ],
-        }),
-      );
+      let response;
+      try {
+        response = await createCognitoUser();
+      } catch (err: unknown) {
+        const errorName = getCognitoErrorName(err);
+
+        if (errorName !== "UsernameExistsException") {
+          throw err;
+        }
+
+        const cognitoUser = await cognitoClient.send(
+          new AdminGetUserCommand({
+            UserPoolId: COGNITO_USER_POOL_ID,
+            Username: payload.username,
+          }),
+        );
+
+        if (cognitoUser.UserStatus?.toUpperCase() !== "UNCONFIRMED") {
+          throw new AppError(
+            StatusCodes.CONFLICT,
+            "UsernameAlreadyExists",
+            "Username is already taken.",
+          );
+        }
+
+        Logger.info("SignUp: Recreating unconfirmed Cognito user", {
+          username: payload.username,
+        });
+
+        await this.deleteCognitoUser(payload.username, "SignUp");
+        response = await createCognitoUser();
+      }
 
       Logger.info("SignUp: User created successfully in Cognito", {
         username: payload.username,
         user_sub: response.UserSub,
       });
 
-      const existingRegistration = await prisma.register_user.findUnique({
-        where: { email: payload.email },
-      });
+      const [existingRegistrationByUsername, existingRegistrationByEmail] = await Promise.all([
+        prisma.register_user.findUnique({
+          where: { username: payload.username },
+          include: {
+            app_user: {
+              select: {
+                id: true,
+              },
+            },
+          },
+        }),
+        prisma.register_user.findUnique({
+          where: { email: payload.email },
+          include: {
+            app_user: {
+              select: {
+                id: true,
+              },
+            },
+          },
+        }),
+      ]);
 
-      if (existingRegistration) {
+      const reusableRegistration =
+        isRecoverablePendingRegistration(existingRegistrationByUsername)
+          ? existingRegistrationByUsername
+          : isRecoverablePendingRegistration(existingRegistrationByEmail)
+            ? existingRegistrationByEmail
+            : null;
+
+      if (reusableRegistration) {
         await prisma.register_user.update({
-          where: { id: existingRegistration.id },
+          where: { id: reusableRegistration.id },
           data: {
             first_name: payload.first_name,
             last_name: payload.last_name,
             email: payload.email,
             username: payload.username,
-            phone: normalizePhone(payload.phone),
+            phone: normalizedPhone,
           },
         });
       } else {
@@ -1153,7 +1322,7 @@ export class AuthService {
             first_name: payload.first_name,
             last_name: payload.last_name,
             email: payload.email,
-            phone: normalizePhone(payload.phone),
+            phone: normalizedPhone,
             email_verified: false,
             status: "PENDING_APPROVAL",
           },
@@ -1603,6 +1772,72 @@ export class AuthService {
           ? corporationMap.get(registration.app_user.corporation_id) ?? null
           : null,
     }));
+  }
+
+  public static async deleteRegistration(
+    registrationId: number,
+  ): Promise<{ registration_id: number; deleted_app_user_id: number | null }> {
+    const registration = await prisma.register_user.findUnique({
+      where: { id: registrationId },
+      include: {
+        app_user: {
+          select: {
+            id: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    if (!registration) {
+      throw new AppError(
+        StatusCodes.NOT_FOUND,
+        "RegistrationNotFound",
+        "Registration request not found.",
+      );
+    }
+
+    const canDeleteRejectedUser = registration.status === "REJECTED";
+    const canDeleteDisabledApprovedUser =
+      registration.status === "APPROVED" && registration.app_user?.status === false;
+
+    if (!canDeleteRejectedUser && !canDeleteDisabledApprovedUser) {
+      throw new AppError(
+        StatusCodes.BAD_REQUEST,
+        "DeletionNotAllowed",
+        "Only rejected users or disabled approved users can be deleted.",
+      );
+    }
+
+    await this.deleteCognitoUser(registration.username);
+
+    await prisma.$transaction(async (tx) => {
+      if (registration.app_user?.id) {
+        await tx.app_user.delete({
+          where: {
+            id: registration.app_user.id,
+          },
+        });
+      }
+
+      await tx.register_user.delete({
+        where: {
+          id: registration.id,
+        },
+      });
+    });
+
+    Logger.info("DeleteRegistration: User deleted from register_user, app_user and Cognito", {
+      registration_id: registrationId,
+      username: registration.username,
+      registration_status: registration.status,
+      deleted_app_user_id: registration.app_user?.id ?? null,
+    });
+
+    return {
+      registration_id: registrationId,
+      deleted_app_user_id: registration.app_user?.id ?? null,
+    };
   }
 
   public static async initiateLogin(payload: LoginInitiatePayload): Promise<

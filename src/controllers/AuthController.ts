@@ -15,6 +15,7 @@ import {
   loginInitiateSchema,
   loginResendSchema,
   loginRespondSchema,
+  registrationIdParamSchema,
   signUpSchema,
   usernameAvailabilitySchema
 } from "../validations/AuthValidation";
@@ -26,10 +27,15 @@ export class AuthController {
   ): Promise<void> {
     const payload = usernameAvailabilitySchema.parse(req.body);
     const data = await AuthService.checkUsernameAvailability(payload);
+    const message = data.recoverable
+      ? "Username exists but is pending verification. Continue signup to get a new confirmation code."
+      : data.available
+        ? "Username is available."
+        : "Username is already taken.";
 
     ApiResponse.ok(
       res,
-      data.available ? "Username is available." : "Username is already taken.",
+      message,
       data
     );
   }
@@ -41,7 +47,16 @@ export class AuthController {
     const [existingRegistration, existingAppUser] = await Promise.all([
       prisma.register_user.findUnique({
         where: { email: payload.email },
-        select: { id: true }
+        select: {
+          id: true,
+          email_verified: true,
+          status: true,
+          app_user: {
+            select: {
+              id: true
+            }
+          }
+        }
       }),
       prisma.app_user.findFirst({
         where: { email: payload.email },
@@ -49,7 +64,13 @@ export class AuthController {
       })
     ]);
 
-    if (existingRegistration || existingAppUser) {
+    const recoverableRegistration =
+      !!existingRegistration &&
+      existingRegistration.email_verified === false &&
+      existingRegistration.status === "PENDING_APPROVAL" &&
+      !existingRegistration.app_user;
+
+    if ((!recoverableRegistration && existingRegistration) || existingAppUser) {
       Logger.warn("SignUp blocked because email is already registered", {
         username: payload.username,
         email: payload.email,
@@ -58,8 +79,8 @@ export class AuthController {
 
       throw new AppError(
         StatusCodes.CONFLICT,
-        "UserAlreadyRegistered",
-        "User already registered."
+        "EmailAlreadyRegistered",
+        "Email is already registered."
       );
     }
 
@@ -125,6 +146,21 @@ export class AuthController {
     const data = await AuthService.listRegistrations(query);
 
     ApiResponse.ok(res, "Registration requests fetched successfully.", data);
+  }
+
+  public static async deleteRegistration(req: Request, res: Response): Promise<void> {
+    const { id } = registrationIdParamSchema.parse(req.params);
+    Logger.debug("DeleteRegistration initiated", {
+      registration_id: id
+    });
+
+    const data = await AuthService.deleteRegistration(id);
+
+    Logger.info("Registration deleted successfully", {
+      registration_id: id
+    });
+
+    ApiResponse.ok(res, "User deleted successfully.", data);
   }
 
   public static async initiateLogin(req: Request, res: Response): Promise<void> {

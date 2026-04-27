@@ -55,6 +55,10 @@ export const listRegistrationsQuerySchema = z.object({
   status: z.enum(["PENDING_APPROVAL", "APPROVED", "REJECTED"]).optional()
 });
 
+export const registrationIdParamSchema = z.object({
+  id: z.coerce.number().int().positive()
+});
+
 export const loginInitiateSchema = z.object({
   username: z.string().min(3),
   password: z.string().min(8)
@@ -87,6 +91,7 @@ export type UsernameAvailabilityPayload = z.infer<typeof usernameAvailabilitySch
 export type ConfirmSignUpPayload = z.infer<typeof confirmSignUpSchema>;
 export type ApproveRegistrationPayload = z.infer<typeof approveRegistrationSchema>;
 export type ListRegistrationsQuery = z.infer<typeof listRegistrationsQuerySchema>;
+export type RegistrationIdParam = z.infer<typeof registrationIdParamSchema>;
 export type LoginInitiatePayload = z.infer<typeof loginInitiateSchema>;
 export type LoginRespondPayload = z.infer<typeof loginRespondSchema>;
 export type LoginResendPayload = z.infer<typeof loginResendSchema>;
