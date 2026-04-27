@@ -22,7 +22,7 @@ provider:
             - cognito-idp:ForgotPassword
             - cognito-idp:ConfirmForgotPassword
           Resource:
-            - arn:aws:cognito-idp:${self:provider.region}:${aws:accountId}:userpool/${env:COGNITO_USER_POOL_ID}
+            - arn:aws:cognito-idp:*:${aws:accountId}:userpool/*
 
   vpc:
     securityGroupIds:
@@ -98,6 +98,7 @@ package:
 functions:
   api:
     handler: lambda.handler
+    role: ${self:provider.iam.role}
     events:
       - httpApi:
           method: ANY
