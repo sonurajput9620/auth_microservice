@@ -99,6 +99,7 @@ package:
 functions:
   api:
     handler: lambda.handler
+    role: ${self:provider.iam.role}
     events:
       - httpApi:
           method: ANY
