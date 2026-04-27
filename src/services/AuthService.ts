@@ -41,8 +41,6 @@ const getEnv = (key: string): string => {
   return value;
 };
 
-const COGNITO_CLIENT_ID = getEnv("COGNITO_CLIENT_ID");
-const COGNITO_USER_POOL_ID = getEnv("COGNITO_USER_POOL_ID");
 const AWS_REGION =
   process.env.AWS_REGION?.trim() ||
   process.env.AWS_DEFAULT_REGION?.trim() ||
@@ -53,10 +51,12 @@ const cognitoClient = new CognitoIdentityProviderClient({
 });
 const CUSTOM_EMAIL_CHALLENGE_NAME = "CUSTOM_EMAIL_OTP";
 const LEGACY_EMAIL_CHALLENGE_NAME = "EMAIL_OTP";
+const getCognitoClientId = (): string => getEnv("COGNITO_CLIENT_ID");
+const getCognitoUserPoolId = (): string => getEnv("COGNITO_USER_POOL_ID");
 const getConfiguredCognitoUserPoolArn = (): string =>
   AWS_ACCOUNT_ID
-    ? `arn:aws:cognito-idp:${AWS_REGION}:${AWS_ACCOUNT_ID}:userpool/${COGNITO_USER_POOL_ID}`
-    : `arn:aws:cognito-idp:${AWS_REGION}:<unknown-account>:userpool/${COGNITO_USER_POOL_ID}`;
+    ? `arn:aws:cognito-idp:${AWS_REGION}:${AWS_ACCOUNT_ID}:userpool/${getCognitoUserPoolId()}`
+    : `arn:aws:cognito-idp:${AWS_REGION}:<unknown-account>:userpool/${getCognitoUserPoolId()}`;
 
 const parsePositiveIntegerEnv = (key: string, fallback: number): number => {
   const rawValue = process.env[key]?.trim();
@@ -543,7 +543,7 @@ export class AuthService {
     try {
       await cognitoClient.send(
         new AdminDeleteUserCommand({
-          UserPoolId: COGNITO_USER_POOL_ID,
+          UserPoolId: getCognitoUserPoolId(),
           Username: username,
         }),
       );
@@ -570,7 +570,7 @@ export class AuthService {
           err instanceof Error ? err : new Error(String(err)),
           {
             username,
-            cognito_user_pool_id: COGNITO_USER_POOL_ID,
+            cognito_user_pool_id: process.env.COGNITO_USER_POOL_ID?.trim() || null,
             cognito_user_pool_arn: getConfiguredCognitoUserPoolArn(),
             aws_region: AWS_REGION,
             aws_account_id: AWS_ACCOUNT_ID,
@@ -973,10 +973,10 @@ export class AuthService {
 
     try {
       const cognitoUser = await cognitoClient.send(
-        new AdminGetUserCommand({
-          UserPoolId: COGNITO_USER_POOL_ID,
-          Username: user.username,
-        }),
+          new AdminGetUserCommand({
+            UserPoolId: getCognitoUserPoolId(),
+            Username: user.username,
+          }),
       );
 
       const cognitoEmail = cognitoUser.UserAttributes?.find(
@@ -1177,7 +1177,7 @@ export class AuthService {
     try {
       const cognitoUser = await cognitoClient.send(
         new AdminGetUserCommand({
-          UserPoolId: COGNITO_USER_POOL_ID,
+          UserPoolId: getCognitoUserPoolId(),
           Username: username,
         })
       );
@@ -1233,7 +1233,7 @@ export class AuthService {
       const createCognitoUser = () =>
         cognitoClient.send(
           new SignUpCommand({
-            ClientId: COGNITO_CLIENT_ID,
+            ClientId: getCognitoClientId(),
             Username: payload.username,
             Password: payload.password,
             UserAttributes: [
@@ -1264,7 +1264,7 @@ export class AuthService {
 
         const cognitoUser = await cognitoClient.send(
           new AdminGetUserCommand({
-            UserPoolId: COGNITO_USER_POOL_ID,
+            UserPoolId: getCognitoUserPoolId(),
             Username: payload.username,
           }),
         );
@@ -1371,7 +1371,7 @@ export class AuthService {
       try {
         await cognitoClient.send(
           new ConfirmSignUpCommand({
-            ClientId: COGNITO_CLIENT_ID,
+            ClientId: getCognitoClientId(),
             Username: payload.username,
             ConfirmationCode: payload.confirmation_code,
           }),
@@ -1440,7 +1440,7 @@ export class AuthService {
       try {
         await cognitoClient.send(
           new AdminUpdateUserAttributesCommand({
-            UserPoolId: COGNITO_USER_POOL_ID,
+            UserPoolId: getCognitoUserPoolId(),
             Username: payload.username,
             UserAttributes: [{ Name: "email_verified", Value: "true" }],
           }),
@@ -1892,8 +1892,8 @@ export class AuthService {
       const response = await cognitoClient.send(
         new AdminInitiateAuthCommand({
           AuthFlow: "ADMIN_USER_PASSWORD_AUTH",
-          ClientId: COGNITO_CLIENT_ID,
-          UserPoolId: COGNITO_USER_POOL_ID,
+          ClientId: getCognitoClientId(),
+          UserPoolId: getCognitoUserPoolId(),
           AuthParameters: {
             USERNAME: payload.username,
             PASSWORD: payload.password,
@@ -2173,7 +2173,7 @@ export class AuthService {
 
       const response = await cognitoClient.send(
         new ForgotPasswordCommand({
-          ClientId: COGNITO_CLIENT_ID,
+          ClientId: getCognitoClientId(),
           Username: payload.username,
         }),
       );
@@ -2210,7 +2210,7 @@ export class AuthService {
 
       await cognitoClient.send(
         new ConfirmForgotPasswordCommand({
-          ClientId: COGNITO_CLIENT_ID,
+          ClientId: getCognitoClientId(),
           Username: payload.username,
           ConfirmationCode: payload.confirmation_code,
           Password: payload.new_password,

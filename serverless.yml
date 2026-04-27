@@ -1,4 +1,5 @@
 service: auth-microservice-lambda
+useDotenv: true
 
 provider:
   name: aws
