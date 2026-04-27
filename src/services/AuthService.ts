@@ -47,11 +47,16 @@ const AWS_REGION =
   process.env.AWS_REGION?.trim() ||
   process.env.AWS_DEFAULT_REGION?.trim() ||
   "ap-south-1";
+const AWS_ACCOUNT_ID = process.env.AWS_ACCOUNT_ID?.trim() || null;
 const cognitoClient = new CognitoIdentityProviderClient({
   region: AWS_REGION,
 });
 const CUSTOM_EMAIL_CHALLENGE_NAME = "CUSTOM_EMAIL_OTP";
 const LEGACY_EMAIL_CHALLENGE_NAME = "EMAIL_OTP";
+const getConfiguredCognitoUserPoolArn = (): string =>
+  AWS_ACCOUNT_ID
+    ? `arn:aws:cognito-idp:${AWS_REGION}:${AWS_ACCOUNT_ID}:userpool/${COGNITO_USER_POOL_ID}`
+    : `arn:aws:cognito-idp:${AWS_REGION}:<unknown-account>:userpool/${COGNITO_USER_POOL_ID}`;
 
 const parsePositiveIntegerEnv = (key: string, fallback: number): number => {
   const rawValue = process.env[key]?.trim();
@@ -560,6 +565,17 @@ export class AuthService {
       }
 
       if (errorName === "AccessDeniedException") {
+        Logger.error(
+          `${operation}: Cognito access denied`,
+          err instanceof Error ? err : new Error(String(err)),
+          {
+            username,
+            cognito_user_pool_id: COGNITO_USER_POOL_ID,
+            cognito_user_pool_arn: getConfiguredCognitoUserPoolArn(),
+            aws_region: AWS_REGION,
+            aws_account_id: AWS_ACCOUNT_ID,
+          },
+        );
         throw new AppError(
           StatusCodes.INTERNAL_SERVER_ERROR,
           "CognitoAccessDenied",

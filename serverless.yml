@@ -22,7 +22,7 @@ provider:
             - cognito-idp:ForgotPassword
             - cognito-idp:ConfirmForgotPassword
           Resource:
-            - arn:aws:cognito-idp:${self:provider.region}:${aws:accountId}:userpool/${env:COGNITO_USER_POOL_ID}
+            - arn:aws:cognito-idp:${self:provider.region}:${env:AWS_ACCOUNT_ID, aws:accountId}:userpool/${env:COGNITO_USER_POOL_ID}
 
   vpc:
     securityGroupIds:
@@ -40,6 +40,7 @@ provider:
     NODE_ENV: ${env:NODE_ENV, 'production'}
     PORT: ${env:PORT, '4100'}
     DATABASE_URL: ${env:DATABASE_URL}
+    AWS_ACCOUNT_ID: ${env:AWS_ACCOUNT_ID, aws:accountId}
     COGNITO_USER_POOL_ID: ${env:COGNITO_USER_POOL_ID}
     COGNITO_CLIENT_ID: ${env:COGNITO_CLIENT_ID}
     AUTH_SESSION_SECRET: ${env:AUTH_SESSION_SECRET}
