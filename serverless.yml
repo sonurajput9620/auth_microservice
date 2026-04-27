@@ -1,4 +1,5 @@
 service: auth-microservice-lambda
+frameworkVersion: "3"
 useDotenv: true
 
 provider:
