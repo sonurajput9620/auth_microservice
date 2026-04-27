@@ -7,22 +7,20 @@ provider:
   memorySize: 512
   timeout: 29
   versionFunctions: false
-  iam:
-    role:
-      statements:
-        - Effect: Allow
-          Action:
-            - cognito-idp:AdminDeleteUser
-            - cognito-idp:AdminGetUser
-            - cognito-idp:AdminInitiateAuth
-            - cognito-idp:AdminRespondToAuthChallenge
-            - cognito-idp:AdminUpdateUserAttributes
-            - cognito-idp:SignUp
-            - cognito-idp:ConfirmSignUp
-            - cognito-idp:ForgotPassword
-            - cognito-idp:ConfirmForgotPassword
-          Resource:
-            - arn:aws:cognito-idp:${self:provider.region}:${env:AWS_ACCOUNT_ID, aws:accountId}:userpool/${env:COGNITO_USER_POOL_ID}
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - cognito-idp:AdminDeleteUser
+        - cognito-idp:AdminGetUser
+        - cognito-idp:AdminInitiateAuth
+        - cognito-idp:AdminRespondToAuthChallenge
+        - cognito-idp:AdminUpdateUserAttributes
+        - cognito-idp:SignUp
+        - cognito-idp:ConfirmSignUp
+        - cognito-idp:ForgotPassword
+        - cognito-idp:ConfirmForgotPassword
+      Resource:
+        - arn:aws:cognito-idp:${self:provider.region}:${env:AWS_ACCOUNT_ID, aws:accountId}:userpool/${env:COGNITO_USER_POOL_ID}
 
   vpc:
     securityGroupIds:
@@ -99,7 +97,6 @@ package:
 functions:
   api:
     handler: lambda.handler
-    role: ${self:provider.iam.role}
     events:
       - httpApi:
           method: ANY
